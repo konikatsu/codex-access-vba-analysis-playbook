@@ -1,0 +1,9 @@
+*.accdb
+*.mdb
+*.laccdb
+*.ldb
+*.accde
+*.mde
+exports/
+backups/
+tmp/
