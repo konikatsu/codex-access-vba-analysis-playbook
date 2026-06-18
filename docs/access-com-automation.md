@@ -128,7 +128,7 @@ End Function
 起動例:
 
 ```powershell
-Start-Process "msaccess.exe" -ArgumentList '"C:\work\access-project\Sample.accdb"', '/cmd', 'SKIP_AUTOEXEC'
+Start-Process msaccess.exe "`"C:\work\access-project\Sample.accdb`" /cmd SKIP_AUTOEXEC"
 ```
 
 既存のAutoExecがすでに初期処理関数を直接呼んでいる場合は、最小修正として初期処理関数の先頭に判定を入れる方法もあります。
@@ -161,6 +161,7 @@ End Function
 
 - COMの `OpenCurrentDatabase` では、通常 `Command()` は期待どおり渡りません。
 - `/cmd SKIP_AUTOEXEC` を使う場合は、`msaccess.exe` の起動引数として渡します。
+- 標準コマンドは `Start-Process msaccess.exe "`"C:\path\to\db.accdb`" /cmd SKIP_AUTOEXEC"` の形式にします。
 - `AutomationSecurity = 1` はVBA実行用であり、初期処理をスキップする仕組みではありません。
 
 ## 権限付き実行

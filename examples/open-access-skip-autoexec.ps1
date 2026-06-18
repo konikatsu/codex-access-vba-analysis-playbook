@@ -4,7 +4,7 @@ param(
 
     [string]$AccessExe = 'msaccess.exe',
 
-    [string]$CommandValue = 'SKIP_AUTOEXEC'
+    [string]$CommandText = 'SKIP_AUTOEXEC'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,10 +13,6 @@ if (-not (Test-Path -LiteralPath $DatabasePath)) {
     throw "Database not found: $DatabasePath"
 }
 
-$arguments = @(
-    "`"$DatabasePath`"",
-    '/cmd',
-    $CommandValue
-)
+$arguments = "`"$DatabasePath`" /cmd $CommandText"
 
 Start-Process -FilePath $AccessExe -ArgumentList $arguments
