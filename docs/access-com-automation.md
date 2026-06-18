@@ -51,6 +51,16 @@ COM自動化では、まず次の方針を優先します。
 - それでもダイアログや業務処理が動く場合だけ、コピーDBで一時的な無効化を検討する。
 - 一時変更した場合は、変更箇所と戻し手順を記録する。
 
+GUI/VBE作業では、DB内の起動処理を書き換える代わりに、Shiftキーを押下した状態でDBを開く補助スクリプトを使う方法があります。
+
+例:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ".\examples\open-access-devmode.ps1" -DatabasePath "C:\work\access-project\Sample.accdb"
+```
+
+この方法なら、DB内の `AutoExec` や起動用関数を変更せずに、開発者モード相当で起動できます。
+
 ## 権限付き実行
 
 サンドボックスや制限付き環境では、`LoadFromText` が `予約済みエラー` になることがあります。  
