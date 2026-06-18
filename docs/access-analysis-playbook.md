@@ -45,6 +45,31 @@ rg -n "^\s*\(\)\s*$|^\s*\)\s*$" "C:\work\access-project\exports\after"
 
 孤立した括弧行が複数モジュールに出る場合は、個別に直し続けるより、バックアップへ戻して変換ロジックを修正してから再適用する方が安全です。
 
+## コード置換は最小範囲にする
+
+VBEオブジェクトモデルでコードを置換する場合、モジュール全体を削除して追加し直すより、対象行だけを置換する方が安全です。
+
+避けたい例:
+
+```vb
+modCode.DeleteLines 1, lineCount
+modCode.AddFromString text
+```
+
+推奨:
+
+```vb
+modCode.ReplaceLine targetLine, newLine
+```
+
+方針:
+
+- まず `CodeModule.Find` や行単位の走査で一致行を探す。
+- 一致した行だけ `ReplaceLine` で置換する。
+- 置換後に `SaveAsText` で出力し、差分を見る。
+- 孤立した `()` や `)` が混入していないか検索する。
+- 最後に `RunCommand(126)` でコンパイルする。
+
 ## 起動処理を止める理由
 
 Access DBは、開いた瞬間に業務処理が動くことがあります。
