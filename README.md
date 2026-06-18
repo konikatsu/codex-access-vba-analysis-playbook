@@ -17,6 +17,7 @@ Access/VBA の既存システムを Codex などのAIエージェントで解析
 - [LoadFromTextトラブルシュート](docs/loadfromtext-troubleshooting.md)
 - [RunCommand(126)でコンパイルする](docs/compile-with-runcommand.md)
 - [解析情報をエクスポートする考え方](docs/export-analysis-info.md)
+- [sqlcmdを使えるようにする](docs/sqlcmd-setup.md)
 
 ## 重要な教訓
 
