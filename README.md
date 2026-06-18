@@ -46,6 +46,7 @@ $access.OpenCurrentDatabase($dbPath)
 - [Access VBAをコンパイルする](examples/compile-access-vba.ps1)
 - [Shift-bypassでAccess DBを開く](examples/open-access-devmode.ps1)
 - [AutomationSecurity=3でAccess DBを開く](examples/open-access-no-autoexec.ps1)
+- [/cmd SKIP_AUTOEXEC でAccess DBを開く](examples/open-access-skip-autoexec.ps1)
 
 ## 注意
 

@@ -45,3 +45,38 @@ VBEで `デバッグ > コンパイル` を実行し、最初に止まった1件
 - 変換ツール実行済みか
 
 コンパイルは最初の1件で止まるため、まず最初のエラーだけ潰します。
+
+## 64bit化でよくある型不一致
+
+`Declare PtrSafe` と `LongPtr` への変換後は、API宣言だけでなく、その戻り値を受ける既存変数も確認します。
+
+例:
+
+```vb
+Private Declare PtrSafe Function GlobalFree Lib "kernel32" (ByVal hMem As LongPtr) As LongPtr
+
+Dim lngRtn As Long
+Dim hMemory As LongPtr
+
+lngRtn = GlobalFree(hMemory)
+```
+
+64bit VBAでは、`GlobalFree` の戻り値が `LongPtr` なのに `lngRtn As Long` で受けているため、型不一致になることがあります。
+
+戻り値を使っていない場合は、代入せずに呼び出します。
+
+```vb
+Call GlobalFree(hMemory)
+```
+
+戻り値を使う必要がある場合は、受ける変数側も `LongPtr` にします。
+
+```vb
+Dim freeResult As LongPtr
+freeResult = GlobalFree(hMemory)
+```
+
+64bit化では、次の両方を確認します。
+
+- API宣言の引数と戻り値
+- API呼び出し側で戻り値やハンドルを受ける変数

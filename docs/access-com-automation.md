@@ -85,6 +85,69 @@ powershell -Sta -ExecutionPolicy Bypass -File ".\examples\open-access-no-autoexe
 これは、DBをダブルクリックや `Start-Process` で直接開くのではなく、`Access.Application` から開く点が重要です。  
 ただし、起動処理がAutoExecマクロではなく起動フォームのLoadイベントやスタートアップ設定にある場合、これだけでは完全に止まらないことがあります。
 
+## /cmd で解析用の起動モードを作る
+
+長期的には、Access DB側に「解析や保守では初期処理をスキップできる公式の入口」を用意するのが扱いやすいです。
+
+AutoExecマクロから業務初期処理を直接呼ぶのではなく、いったん起動用関数を呼びます。
+
+AutoExecマクロ:
+
+```text
+RunCode: AutoExecMain()
+```
+
+標準モジュール:
+
+```vb
+Public Function AutoExecMain()
+
+    If IsSkipAutoExecMode() Then
+        Debug.Print "AutoExec skipped by command line."
+
+        ' 必要ならメニュー画面だけ開く
+        ' DoCmd.OpenForm "Menu"
+
+        Exit Function
+    End If
+
+    Call InitialProcess
+
+End Function
+
+Private Function IsSkipAutoExecMode() As Boolean
+    Dim cmd As String
+
+    cmd = Nz(Command(), "")
+
+    IsSkipAutoExecMode = _
+        (InStr(1, cmd, "SKIP_AUTOEXEC", vbTextCompare) > 0)
+End Function
+```
+
+起動例:
+
+```powershell
+Start-Process "msaccess.exe" -ArgumentList '"C:\work\access-project\Sample.accdb"', '/cmd', 'SKIP_AUTOEXEC'
+```
+
+既存のAutoExecがすでに初期処理関数を直接呼んでいる場合は、最小修正として初期処理関数の先頭に判定を入れる方法もあります。
+
+```vb
+Public Function InitialProcess()
+
+    If InStr(1, Nz(Command(), ""), "SKIP_AUTOEXEC", vbTextCompare) > 0 Then
+        Debug.Print "InitialProcess skipped."
+        Exit Function
+    End If
+
+    ' 既存の初期処理
+
+End Function
+```
+
+ただし、将来的には `AutoExecMain` を挟む方が、通常起動、保守起動、テスト起動を管理しやすくなります。
+
 ## 権限付き実行
 
 サンドボックスや制限付き環境では、`LoadFromText` が `予約済みエラー` になることがあります。  
