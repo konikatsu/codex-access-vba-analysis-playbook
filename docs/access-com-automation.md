@@ -40,6 +40,19 @@ $access.AutomationSecurity = 1
 - 何もしない診断関数でも実行できない。
 - コード実行やコンパイルがセキュリティ状態で止まる。
 
+用途によって値を使い分けます。
+
+```text
+1 = msoAutomationSecurityLow
+3 = msoAutomationSecurityForceDisable
+```
+
+- 解析用モジュールを取り込んで `Application.Run` したい場合: `1`
+- AutoExecなどの起動マクロを止めて、GUI/VBEで安全に開きたい場合: `3`
+
+`3` はマクロ実行を強制無効化する目的に向きます。  
+その一方で、DBを開いた後に `Application.Run` でVBAを実行したい作業では、実行自体も止まる可能性があるため、目的に応じて使い分けます。
+
 ## 起動処理の扱い
 
 自動起動を止めるために、DB側の `AutoExec`、`StartUp`、起動用関数を直接書き換える方法は、戻し忘れのリスクがあります。
@@ -60,6 +73,17 @@ powershell -ExecutionPolicy Bypass -File ".\examples\open-access-devmode.ps1" -D
 ```
 
 この方法なら、DB内の `AutoExec` や起動用関数を変更せずに、開発者モード相当で起動できます。
+
+もう一つの方法として、Access COMで起動し、`AutomationSecurity = 3` を設定してから `OpenCurrentDatabase` する方法があります。
+
+例:
+
+```powershell
+powershell -Sta -ExecutionPolicy Bypass -File ".\examples\open-access-no-autoexec.ps1" -DatabasePath "C:\work\access-project\Sample.accdb"
+```
+
+これは、DBをダブルクリックや `Start-Process` で直接開くのではなく、`Access.Application` から開く点が重要です。  
+ただし、起動処理がAutoExecマクロではなく起動フォームのLoadイベントやスタートアップ設定にある場合、これだけでは完全に止まらないことがあります。
 
 ## 権限付き実行
 

@@ -45,6 +45,7 @@ $access.OpenCurrentDatabase($dbPath)
 - [LoadFromTextで標準モジュールを取り込む](examples/loadfromtext-module.ps1)
 - [Access VBAをコンパイルする](examples/compile-access-vba.ps1)
 - [Shift-bypassでAccess DBを開く](examples/open-access-devmode.ps1)
+- [AutomationSecurity=3でAccess DBを開く](examples/open-access-no-autoexec.ps1)
 
 ## 注意
 
