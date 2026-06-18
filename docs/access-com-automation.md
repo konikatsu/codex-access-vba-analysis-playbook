@@ -148,6 +148,21 @@ End Function
 
 ただし、将来的には `AutoExecMain` を挟む方が、通常起動、保守起動、テスト起動を管理しやすくなります。
 
+この方式をDB側に実装できている場合、GUI/VBE作業では `/cmd SKIP_AUTOEXEC` を第一候補にします。
+
+推奨優先順位:
+
+1. GUI/VBE作業: `/cmd SKIP_AUTOEXEC`
+2. フォールバック: Shift-bypass
+3. COMでVBA実行が必要: `AutomationSecurity = 1`
+4. GUI確認だけでマクロ停止したい: `AutomationSecurity = 3`
+
+注意:
+
+- COMの `OpenCurrentDatabase` では、通常 `Command()` は期待どおり渡りません。
+- `/cmd SKIP_AUTOEXEC` を使う場合は、`msaccess.exe` の起動引数として渡します。
+- `AutomationSecurity = 1` はVBA実行用であり、初期処理をスキップする仕組みではありません。
+
 ## 権限付き実行
 
 サンドボックスや制限付き環境では、`LoadFromText` が `予約済みエラー` になることがあります。  
