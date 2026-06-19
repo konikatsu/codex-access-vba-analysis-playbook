@@ -18,6 +18,7 @@ Access/VBA の既存システムを Codex などのAIエージェントで解析
 - [RunCommand(126)でコンパイルする](docs/compile-with-runcommand.md)
 - [解析情報をエクスポートする考え方](docs/export-analysis-info.md)
 - [sqlcmdを使えるようにする](docs/sqlcmd-setup.md)
+- [Accessリンクテーブル向けSQL Serverテスト環境の選び方](docs/sql-server-test-environment-for-access.md)
 
 ## 重要な教訓
 
