@@ -1,52 +1,61 @@
-# Access linked tables and SQL Server test environments
+# Accessリンクテーブル向けSQL Serverテスト環境の選び方
 
-This note summarizes how to choose a local SQL Server test environment when an
-Access application uses linked SQL Server tables.
+AccessアプリケーションがSQL Serverのリンクテーブルを使っている場合に、
+ローカルのテスト用SQL Serverをどう用意するかの判断メモです。
 
-## Summary
+## 結論
 
-If the Access links can be recreated, Docker is often the easiest way to manage
-many test databases. Use `server,port` style connection strings such as:
+Access側のリンクテーブルを張り直せるなら、DockerでSQL Serverを動かす方法は管理しやすいです。
+
+Docker方式では、接続先は次のような `サーバ名,ポート番号` 形式にします。
 
 ```text
 localhost,14333
 ```
 
-or, if a local host alias is useful:
+または、ローカルのhostsやDNSで別名を付けるなら次のようにできます。
 
 ```text
 app-sql,14333
 ```
 
-If the application must keep a Windows SQL Server named-instance connection such
-as:
+一方で、既存アプリケーションが次のようなWindows SQL Serverの名前付きインスタンス形式を
+どうしても維持する必要がある場合は、DockerではなくSQL Server Developer Editionや
+SQL Server Expressをローカルに名前付きインスタンスとしてインストールする方が素直です。
 
 ```text
 server-name\instance-name
 ```
 
-install SQL Server Developer or Express locally as a named instance instead of
-using Docker.
+## Dockerで名前付きインスタンス形式が難しい理由
 
-## Why named instances are awkward in Docker
+SQL Serverコンテナは、基本的に「1コンテナ = 1つの既定インスタンス」として扱います。
 
-SQL Server containers are normally used as one default SQL Server instance per
-container. The host maps a TCP port to the container's SQL Server port:
+ホスト側のポートを、コンテナ内のSQL Serverポートへ割り当てます。
 
 ```text
-host port 14333 -> container port 1433
+ホスト側 14333 -> コンテナ側 1433
 ```
 
-Clients connect with `server,port`, not `server\instance`.
+そのため、クライアントからは次の形式で接続します。
 
-The `server\instance` syntax depends on SQL Server Browser-style instance name
-resolution. Recreating that behavior around Linux SQL Server containers is
-possible only with extra plumbing and is usually not worth it for development
-and test databases.
+```text
+server,port
+```
 
-## Recommended Docker pattern
+名前付きインスタンスの接続形式である次の形ではありません。
 
-Use one container and one named volume per test database or project:
+```text
+server\instance
+```
+
+`server\instance` 形式は、SQL Server Browserによるインスタンス名からポート番号への解決に依存します。
+Linux版SQL Serverコンテナの周辺でこの挙動を再現することも不可能ではありませんが、
+開発・テスト環境としては手間が大きく、割に合わないことが多いです。
+
+## Dockerで作る場合の基本形
+
+テストDBやプロジェクトごとに、コンテナ名・ポート・volumeを分けます。
 
 ```powershell
 docker run `
@@ -60,7 +69,7 @@ docker run `
   -d mcr.microsoft.com/mssql/server:2022-latest
 ```
 
-Verify the connection:
+接続確認は `sqlcmd` で行えます。
 
 ```powershell
 & 'C:\Program Files\SqlCmd\sqlcmd.exe' `
@@ -71,50 +80,115 @@ Verify the connection:
   -Q "SELECT @@VERSION"
 ```
 
-The volume is important. If the container is removed without persistent storage,
-the database files inside the container are lost.
+volumeを使うことが重要です。
+volumeなしでコンテナを削除すると、コンテナ内のデータベースファイルも失われます。
 
-## Access relink strategy
+## Accessリンクテーブルの張り直し方針
 
-When using Docker, relink the Access tables to the container endpoint:
-
-```text
-Before: server-name\instance-name
-After:  localhost,14333
-```
-
-or:
+Docker方式にする場合は、Access側のリンクテーブルをコンテナの接続先へ張り直します。
 
 ```text
-After:  app-sql,14333
+変更前: server-name\instance-name
+変更後: localhost,14333
 ```
 
-If using a host alias, add the alias to the local hosts file or DNS so it points
-to the Docker host. The connection still uses a comma and port, not a backslash
-and instance name.
+または、ホスト名を寄せたい場合は次のようにします。
 
-## Decision guide
+```text
+変更後: app-sql,14333
+```
 
-- Use Docker when the Access linked tables can be relinked to `server,port`.
-- Use local SQL Server Developer when many databases need full SQL Server
-  features without Express limits.
-- Use local SQL Server Express when the environment should resemble a small,
-  free, installed SQL Server instance.
-- Use LocalDB only for single-user developer tests where services and remote
-  style connections are not needed.
-- Avoid trying to force Docker SQL Server to behave like a Windows named
-  instance unless there is a very specific reason.
+ホスト名の別名を使う場合は、ローカルのhostsまたはDNSでDockerホストを指すようにします。
+ただし、接続形式はあくまでカンマ付きの `server,port` です。
+バックスラッシュ付きの `server\instance` ではありません。
 
-## Practical rule
+## 判断基準
 
-For Access systems, the simplest test strategy is usually:
+- Accessのリンクテーブルを `server,port` 形式へ張り直せるなら、Docker方式が扱いやすい。
+- 名前付きインスタンス形式 `server\instance` を維持したいなら、通常インストールのSQL Serverを使う。
+- 多数のテストDBを作るなら、SQL Server Developer EditionのDockerコンテナが便利。
+- Expressの制限に近い環境を再現したいなら、SQL Server Expressの通常インストールも候補になる。
+- LocalDBは単独開発者の軽い検証向けで、Accessリンクテーブルの本格的な接続先としては優先度が下がる。
+- Docker版SQL ServerにWindowsの名前付きインスタンスの挙動を無理に再現させるのは避ける。
 
-1. Run SQL Server in Docker on a fixed host port.
-2. Restore or create the test database in that container.
-3. Recreate the Access linked tables to `localhost,<port>` or a host alias with
-   the same port.
-4. Keep each project isolated with its own container name, port, and volume.
+## 実務上のおすすめ手順
 
-## References
+Accessシステムのテスト環境では、次の流れが単純です。
+
+1. DockerでSQL Serverを固定ポート付きで起動する。
+2. そのコンテナ内にテストDBを作る、またはバックアップを復元する。
+3. Accessのリンクテーブルを `localhost,<port>` または別名ホストの `server,<port>` に張り直す。
+4. プロジェクトごとに、コンテナ名・ポート番号・volume名を分ける。
+
+## 今回の構築例
+
+実際に作った構成例です。
+
+サンプルスクリプト:
+
+```text
+examples/start-sqlserver-access-test.ps1
+```
+
+実行例:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ".\examples\start-sqlserver-access-test.ps1"
+```
+
+```text
+コンテナ名: sqlserver-access-test01
+volume名: sqlserver-access-test01-data
+ホスト側ポート: 14333
+SQL Server: 2022 Developer
+接続先: localhost,14333
+DB名: access_test
+```
+
+起動確認:
+
+```powershell
+docker ps
+```
+
+表示例:
+
+```text
+sqlserver-access-test01   mcr.microsoft.com/mssql/server:2022-latest   Up ...   0.0.0.0:14333->1433/tcp
+```
+
+接続確認:
+
+```powershell
+& 'C:\Program Files\SqlCmd\sqlcmd.exe' `
+  -S localhost,14333 `
+  -U sa `
+  -C `
+  -Q "SELECT @@VERSION"
+```
+
+パスワードをコマンドラインに直接残したくない場合は、`SQLCMDPASSWORD` 環境変数を使います。
+
+```powershell
+$env:SQLCMDPASSWORD = '<strong-password>'
+& 'C:\Program Files\SqlCmd\sqlcmd.exe' -S localhost,14333 -U sa -C -Q "SELECT name FROM sys.databases"
+Remove-Item Env:\SQLCMDPASSWORD
+```
+
+## Docker Desktopの注意
+
+Docker Desktopの初回起動時にサインイン画面が出ることがあります。
+ローカルのテスト用コンテナを動かすだけなら、サインインをスキップして進められる場合があります。
+
+Codexなどの制限付き環境からDockerを操作する場合、通常権限ではDocker Desktopの名前付きパイプに
+アクセスできず、次のようなエラーになることがあります。
+
+```text
+open //./pipe/dockerDesktopLinuxEngine: Access is denied.
+```
+
+その場合は、Docker操作を権限付きで実行します。
+
+## 参考
 
 - Microsoft Learn: [Quickstart: Run SQL Server Linux container images with Docker](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker)
