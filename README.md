@@ -19,6 +19,7 @@ Access/VBA の既存システムを Codex などのAIエージェントで解析
 - [解析情報をエクスポートする考え方](docs/export-analysis-info.md)
 - [sqlcmdを使えるようにする](docs/sqlcmd-setup.md)
 - [Accessリンクテーブル向けSQL Serverテスト環境の選び方](docs/sql-server-test-environment-for-access.md)
+- [sqlpackageで既存SQL Server DBをDocker SQL Serverへ移行する](docs/sqlpackage-bacpac-to-docker-sqlserver.md)
 
 ## 重要な教訓
 
