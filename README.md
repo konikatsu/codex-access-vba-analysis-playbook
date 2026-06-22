@@ -1,29 +1,46 @@
 # Codex Access/VBA Analysis Playbook
 
-Access/VBA の既存システムを Codex などのAIエージェントで解析・修正するときの実践メモです。
+Microsoft Access / VBA の既存システムを、Codex などのAIエージェントで解析・修正・検証するときの実践メモです。
 
-特に、以下のような作業で詰まりやすい点をまとめています。
-
-- Access DB のフォーム、標準モジュール、クエリ、テーブル定義を静的解析する
-- `Access.Application` の外部COMから `LoadFromText` / `SaveAsText` を使う
-- 解析用モジュールを一時的に取り込んで実行する
-- 64bit Access 対応で `Declare PtrSafe` / `LongPtr` を確認する
-- 外部COMからVBAをコンパイルする
+このリポジトリは、特定の顧客名、DB名、サーバ名、実データを含めない公開用のノウハウ集です。
 
 ## まず読む
 
-- [Access解析プレイブック](docs/access-analysis-playbook.md)
+- [Access資産をAI(Codex)にエクスポートさせる手順](docs/export-analysis-info.md)
+
+## 要件別に読む
+
+- [Access資産をAI向けにエクスポートする](docs/requirements/export-access-assets-for-ai.md)
+- [解析用モジュールをAccess DBへ取り込む](docs/requirements/import-analysis-module.md)
+- [起動処理を止めて開発モードで開く](docs/requirements/startup-bypass.md)
+- [フォーム/レポート/モジュールをLoadFromTextで差し替える](docs/requirements/loadfromtext-replace-object.md)
+- [別PC・別Codexへ申し送りする](docs/requirements/handoff-to-another-ai-agent.md)
+- [作業コピーと進捗メモで安全に進める](docs/requirements/work-copy-and-progress.md)
+
+## 関連メモ
+
+- [Access/VBA作業プレイブック](docs/access-ai-agent-workflow.md)
+- [Access解析の基本](docs/access-analysis-playbook.md)
 - [Access COM自動化の基本](docs/access-com-automation.md)
 - [LoadFromTextトラブルシュート](docs/loadfromtext-troubleshooting.md)
 - [RunCommand(126)でコンパイルする](docs/compile-with-runcommand.md)
-- [解析情報をエクスポートする考え方](docs/export-analysis-info.md)
 - [sqlcmdを使えるようにする](docs/sqlcmd-setup.md)
-- [Accessリンクテーブル向けSQL Serverテスト環境の選び方](docs/sql-server-test-environment-for-access.md)
+- [Accessリンクテーブル向けSQL Serverテスト環境](docs/sql-server-test-environment-for-access.md)
 - [sqlpackageで既存SQL Server DBをDocker SQL Serverへ移行する](docs/sqlpackage-bacpac-to-docker-sqlserver.md)
 
-## 重要な教訓
+## 重要な方針
 
-Access外部COMでは、次を別々に切り分けます。
+- 本体DBを直接触らず、必ず作業コピーで検証する。
+- 成功した作業コピーを次の土台にする。
+- 失敗した作業コピーは修復しながら続けず、破棄する。
+- フォームやレポートの差し替えは、作業コピー上なら `DeleteObject -> LoadFromText -> Compile` でよい。
+- 差し替え前の `SaveAsText` は必須ではない。DBコピー単位で戻れる運用を優先する。
+- GUIテストが必要な画面は、AIエージェントでも押しやすい固定ボタン、十分な幅、ツールチップを用意する。
+- 進捗は Markdown に残し、分母・分子が分かる形にする。
+
+## Access COMで最初に確認すること
+
+Access 外部COMでは、次を別々に切り分けます。
 
 - `LoadFromText` が成功するか
 - `SaveAsText` が成功するか
@@ -31,7 +48,7 @@ Access外部COMでは、次を別々に切り分けます。
 - VBEオブジェクトモデルでコードを読めるか
 - `RunCommand(126)` でコンパイルできるか
 
-また、`OpenCurrentDatabase` の前に `AutomationSecurity = 1` を設定します。
+`OpenCurrentDatabase` の前に、用途に応じて `AutomationSecurity` を設定します。
 
 ```powershell
 $access = New-Object -ComObject Access.Application
@@ -40,20 +57,23 @@ $access.AutomationSecurity = 1
 $access.OpenCurrentDatabase($dbPath)
 ```
 
-サンドボックス環境や制限付き実行では、`LoadFromText` が `予約済みエラー` になることがあります。  
-この場合、DB破損やファイル形式の問題と決めつけず、権限付き実行で再試行します。
+使い分けの目安:
+
+- `AutomationSecurity = 1`: モジュール取り込み、`Application.Run`、コンパイル向け
+- `AutomationSecurity = 3`: GUI確認時にマクロを止めたい場合の候補
+- `/cmd SKIP_AUTOEXEC`: 開発モード起動の標準手段としておすすめ
 
 ## サンプル
 
-- [LoadFromTextで標準モジュールを取り込む](examples/loadfromtext-module.ps1)
+- [標準モジュールをLoadFromTextで取り込む](examples/loadfromtext-module.ps1)
 - [Access VBAをコンパイルする](examples/compile-access-vba.ps1)
 - [Shift-bypassでAccess DBを開く](examples/open-access-devmode.ps1)
 - [AutomationSecurity=3でAccess DBを開く](examples/open-access-no-autoexec.ps1)
 - [/cmd SKIP_AUTOEXEC でAccess DBを開く](examples/open-access-skip-autoexec.ps1)
+- [Docker SQL Serverテスト環境を起動する](examples/start-sqlserver-access-test.ps1)
 
 ## 注意
 
-このリポジトリは実案件のDBや業務ロジックを含みません。  
-公開用に汎用化した手順メモです。
+このリポジトリは公開用に一般化したメモです。実案件のDB名、サーバ名、ユーザー名、パスワード、業務ロジック固有名は入れないでください。
 
-実DBを扱う場合は、必ずバックアップまたはコピーで検証してください。
+実DBを扱う場合は、必ずバックアップまたは作業コピーで検証してください。
