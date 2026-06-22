@@ -21,23 +21,26 @@ AIが見るべき対象:
 
 ## 最短手順
 
-このリポジトリには、エクスポート用VBAコードを同梱しています。
+このリポジトリには、Access資産をエクスポートするためのVBAコードを同梱しています。
 
-- VBE手動インポート用: [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
-- VBE貼り付け用: [`tools/GsTools_analysisinfo_for_vbe_paste.bas`](../../tools/GsTools_analysisinfo_for_vbe_paste.bas)
-- `LoadFromText` 用: [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
+ここでいう「取り込み」は、Access資産を取り込むという意味ではありません。  
+エクスポート処理を実行するための一時ツール `GsTools_analysisinfo` を、対象DBへ追加するという意味です。
+
+- エクスポート実行用モジュール: [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
+- VBE貼り付け用コード: [`tools/GsTools_analysisinfo_for_vbe_paste.bas`](../../tools/GsTools_analysisinfo_for_vbe_paste.bas)
+- COM / `LoadFromText` 用モジュール: [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
 
 まずは次の流れで実行します。
 
 ```text
 1. Access DBを開発モードで開く
-2. VBEで tools/GsTools_analysisinfo.bas をインポートする
+2. エクスポート実行用モジュール tools/GsTools_analysisinfo.bas を対象DBに追加する
 3. イミディエイトウィンドウで ExportAnalysisInfo を実行する
 4. DBと同じフォルダに Defines<DB名>\Latest ができる
 5. AIには Latest フォルダを読ませる
 ```
 
-## VBEで手動インポートする
+## エクスポート実行用モジュールをVBEで追加する
 
 Accessで対象DBを開いたら、VBEを開きます。
 
@@ -83,9 +86,9 @@ Updated Latest: C:\work\sample\Definesapp.accdb\Latest
 ExportAnalysisInfo finished: C:\work\sample\Definesapp.accdb\Exports\20260622_113000
 ```
 
-## COMからLoadFromTextで取り込む
+## エクスポート実行用モジュールをCOMから追加する
 
-手動インポートではなくCodexからCOMで取り込む場合は、`.mdl` を使います。
+VBE画面を使わず、CodexからCOMで追加する場合は、`.mdl` を使います。
 
 ```powershell
 $dbPath = 'C:\work\sample\app.accdb'
