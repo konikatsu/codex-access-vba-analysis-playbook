@@ -8,6 +8,10 @@
 
 ## VBE手動インポート
 
+インポートするファイル:
+
+- [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
+
 ```text
 VBE
 -> ファイル
@@ -28,12 +32,16 @@ VBE
 
 COMで取り込む場合は、`SaveAsText` 形式に近い `.mdl` を使います。
 
+取り込むファイル:
+
+- [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
+
 ```powershell
 $access = New-Object -ComObject Access.Application
 $access.Visible = $false
 $access.AutomationSecurity = 1
 $access.OpenCurrentDatabase($dbPath)
-$access.LoadFromText(5, 'GsTools_analysisinfo', 'C:\work\tools\GsTools_analysisinfo_loadfromtext.mdl')
+$access.LoadFromText(5, 'GsTools_analysisinfo', 'C:\work\codex-access-vba-analysis-playbook\tools\GsTools_analysisinfo_loadfromtext.mdl')
 ```
 
 Accessオブジェクト種別:
