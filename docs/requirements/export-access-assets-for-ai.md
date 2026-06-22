@@ -21,42 +21,18 @@ AIが見るべき対象:
 
 ## 最短手順
 
-このリポジトリには、Access資産をエクスポートするためのVBAコードを同梱しています。
+このページは、対象DBで `ExportAnalysisInfo` が実行できる状態になっている前提のエクスポート手順です。
 
-ここでいう「取り込み」は、Access資産を取り込むという意味ではありません。  
-エクスポート処理を実行するための一時ツール `GsTools_analysisinfo` を、対象DBへ追加するという意味です。
-
-- エクスポート実行用モジュール: [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
-- VBE貼り付け用コード: [`tools/GsTools_analysisinfo_for_vbe_paste.bas`](../../tools/GsTools_analysisinfo_for_vbe_paste.bas)
-- COM / `LoadFromText` 用モジュール: [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
+まだ実行できない場合は、先に [ExportAnalysisInfoを使える状態にする手順](import-analysis-module.md) を実施します。
 
 まずは次の流れで実行します。
 
 ```text
 1. Access DBを開発モードで開く
-2. エクスポート実行用モジュール tools/GsTools_analysisinfo.bas を対象DBに追加する
-3. イミディエイトウィンドウで ExportAnalysisInfo を実行する
-4. DBと同じフォルダに Defines<DB名>\Latest ができる
-5. AIには Latest フォルダを読ませる
+2. イミディエイトウィンドウで ExportAnalysisInfo を実行する
+3. DBと同じフォルダに Defines<DB名>\Latest ができる
+4. AIには Latest フォルダを読ませる
 ```
-
-## エクスポート実行用モジュールをVBEで追加する
-
-Accessで対象DBを開いたら、VBEを開きます。
-
-```text
-Alt + F11
-```
-
-VBEで次を実行します。
-
-```text
-ファイル
--> ファイルのインポート
--> tools/GsTools_analysisinfo.bas を選択
-```
-
-取り込み後、標準モジュールに `GsTools_analysisinfo` が追加されていることを確認します。
 
 ## イミディエイトウィンドウから実行する
 
@@ -84,44 +60,6 @@ Save Form_Main
 Save Module1
 Updated Latest: C:\work\sample\Definesapp.accdb\Latest
 ExportAnalysisInfo finished: C:\work\sample\Definesapp.accdb\Exports\20260622_113000
-```
-
-## エクスポート実行用モジュールをCOMから追加する
-
-VBE画面を使わず、CodexからCOMで追加する場合は、`.mdl` を使います。
-
-```powershell
-$dbPath = 'C:\work\sample\app.accdb'
-$modulePath = 'C:\work\codex-access-vba-analysis-playbook\tools\GsTools_analysisinfo_loadfromtext.mdl'
-
-$access = New-Object -ComObject Access.Application
-$access.Visible = $false
-$access.AutomationSecurity = 1
-$access.OpenCurrentDatabase($dbPath)
-
-$access.LoadFromText(5, 'GsTools_analysisinfo', $modulePath)
-$access.RunCommand(126)
-$access.Run('ExportAnalysisInfo')
-
-$access.CloseCurrentDatabase()
-$access.Quit()
-```
-
-`5` は標準モジュールを表します。
-
-```text
-1 = Query
-2 = Form
-3 = Report
-4 = Macro
-5 = Module
-```
-
-同名モジュールが既にある場合は、作業コピー上で削除してから取り込みます。
-
-```powershell
-$access.DoCmd.DeleteObject(5, 'GsTools_analysisinfo')
-$access.LoadFromText(5, 'GsTools_analysisinfo', $modulePath)
 ```
 
 ## エクスポート用VBAコードの中核

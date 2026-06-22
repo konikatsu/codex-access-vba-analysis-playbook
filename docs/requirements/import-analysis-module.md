@@ -1,50 +1,105 @@
-# 解析用モジュールをAccess DBへ取り込む
+# ExportAnalysisInfoを使える状態にする手順
 
 ## 目的
 
-対象DB自身に解析用の標準モジュールを入れ、`ExportAnalysisInfo` を実行できるようにします。
+対象のAccess DBで、次のコマンドを実行できる状態にします。
 
-外部解析DBから対象DBを操作する方法もありますが、Access COMやVBE操作が遅くなりやすいため、対象DB内に一時的な解析用モジュールを置く方式が扱いやすいです。
-
-## VBE手動インポート
-
-インポートするファイル:
-
-- [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
-
-```text
-VBE
--> ファイル
--> ファイルのインポート
--> GsTools_analysisinfo.bas を選択
+```vb
+ExportAnalysisInfo
 ```
 
-削除する場合:
+`ExportAnalysisInfo` は、Access DB内のフォーム、レポート、モジュール、クエリ、テーブル定義、リレーション、参照設定などを、AIが読めるテキストとして出力するための手順です。
 
-```text
-VBE
--> プロジェクト エクスプローラーで対象モジュールを選択
--> ファイル
--> ファイルの解放
-```
+## 使うファイル
 
-## LoadFromTextで取り込む
+このリポジトリには、3種類のファイルを用意しています。
 
-COMで取り込む場合は、`SaveAsText` 形式に近い `.mdl` を使います。
+- 通常のVBE追加用: [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas)
+- VBE貼り付け用: [`tools/GsTools_analysisinfo_for_vbe_paste.bas`](../../tools/GsTools_analysisinfo_for_vbe_paste.bas)
+- COM / `LoadFromText` 用: [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
 
-取り込むファイル:
+まずは `tools/GsTools_analysisinfo.bas` を使う方法がおすすめです。
 
-- [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
+## 前提
+
+- Access DBを開けること。
+- VBEを開けること。
+- 起動処理が邪魔をしない状態であること。
+- 対象DBは本体ではなく作業コピーが望ましい。
+
+開発モードで開く例:
 
 ```powershell
+Start-Process msaccess.exe "`"C:\work\sample\app.accdb`" /cmd SKIP_AUTOEXEC"
+```
+
+## 方法1: VBEから追加する
+
+対象DBをAccessで開きます。
+
+VBEを開きます。
+
+```text
+Alt + F11
+```
+
+VBEで次を選びます。
+
+```text
+ファイル
+-> ファイルのインポート
+-> tools/GsTools_analysisinfo.bas を選択
+```
+
+プロジェクトエクスプローラーの標準モジュールに、次が追加されていることを確認します。
+
+```text
+GsTools_analysisinfo
+```
+
+## 方法2: VBEに貼り付ける
+
+VBEのファイルインポートが使えない場合は、標準モジュールを新規作成して貼り付けます。
+
+```text
+VBE
+-> 挿入
+-> 標準モジュール
+```
+
+作成された標準モジュールに、次のファイルの内容を貼り付けます。
+
+```text
+tools/GsTools_analysisinfo_for_vbe_paste.bas
+```
+
+貼り付け後、必要ならモジュール名を次に変更します。
+
+```text
+GsTools_analysisinfo
+```
+
+## 方法3: COMからLoadFromTextで追加する
+
+CodexなどからPowerShell COMで追加する場合は、`.mdl` を使います。
+
+```powershell
+$dbPath = 'C:\work\sample\app.accdb'
+$modulePath = 'C:\work\codex-access-vba-analysis-playbook\tools\GsTools_analysisinfo_loadfromtext.mdl'
+
 $access = New-Object -ComObject Access.Application
 $access.Visible = $false
 $access.AutomationSecurity = 1
 $access.OpenCurrentDatabase($dbPath)
-$access.LoadFromText(5, 'GsTools_analysisinfo', 'C:\work\codex-access-vba-analysis-playbook\tools\GsTools_analysisinfo_loadfromtext.mdl')
+
+$access.LoadFromText(5, 'GsTools_analysisinfo', $modulePath)
+$access.RunCommand(126)
+
+$access.CloseCurrentDatabase()
+$access.Quit()
 ```
 
-Accessオブジェクト種別:
+`5` は標準モジュールを表します。
 
 ```text
 1 = Query
@@ -54,13 +109,43 @@ Accessオブジェクト種別:
 5 = Module
 ```
 
-## 注意
+同名モジュールが既にある場合は、作業コピー上で削除してから追加します。
 
-- 標準モジュール名とPublic関数名を同じにしない。
-- `ExportAnalysisInfo` は `Public Sub` または `Public Function` にする。
-- 同名モジュールがある場合は、作業コピー上で削除してから取り込む。
-- `AutomationSecurity=1` は `Application.Run` やコンパイル向け。
-- サンドボックスや権限不足で `LoadFromText` が予約済みエラーになる場合がある。
+```powershell
+$access.DoCmd.DeleteObject(5, 'GsTools_analysisinfo')
+$access.LoadFromText(5, 'GsTools_analysisinfo', $modulePath)
+```
+
+## 追加できたか確認する
+
+VBEのイミディエイトウィンドウを開きます。
+
+```text
+Ctrl + G
+```
+
+次を実行します。
+
+```vb
+? CurrentProject.Name
+```
+
+対象DB名が表示されることを確認します。
+
+次に、`ExportAnalysisInfo` を試します。
+
+```vb
+ExportAnalysisInfo
+```
+
+成功すると、DBと同じフォルダに次のようなフォルダができます。
+
+```text
+Defines<DB名>\
+  Exports\
+    20260622_113000\
+  Latest\
+```
 
 ## よくあるエラー
 
@@ -73,3 +158,31 @@ Accessオブジェクト種別:
 - `ExportAnalysisInfo` がPublicか。
 - 標準モジュールに入っているか。
 - モジュール名と関数名が同じではないか。
+
+### LoadFromTextが予約済みエラーになる
+
+確認すること:
+
+- Accessプロセスが残っていないか。
+- `.laccdb` が残っていないか。
+- `AutomationSecurity = 1` を `OpenCurrentDatabase` より前に設定しているか。
+- 権限付き実行が必要ではないか。
+- 対象DBがロック中ではないか。
+
+失敗した作業コピーは深追いせず、新しいコピーでやり直します。
+
+### 実行すると起動処理が動いてしまう
+
+起動処理を止めてから開きます。
+
+```powershell
+Start-Process msaccess.exe "`"C:\work\sample\app.accdb`" /cmd SKIP_AUTOEXEC"
+```
+
+詳しくは [起動処理を止めて開発モードで開く](startup-bypass.md) を参照してください。
+
+## 次に読む
+
+`ExportAnalysisInfo` が実行できるようになったら、次に進みます。
+
+- [Access資産をAI向けにエクスポートする](export-access-assets-for-ai.md)
