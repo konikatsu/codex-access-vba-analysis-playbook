@@ -53,6 +53,21 @@ $access.AutomationSecurity = 1
 `3` はマクロ実行を強制無効化する目的に向きます。  
 その一方で、DBを開いた後に `Application.Run` でVBAを実行したい作業では、実行自体も止まる可能性があるため、目的に応じて使い分けます。
 
+## コンテンツの有効化
+
+AccessをGUIで開いたときにセキュリティ警告が出ている場合、「コンテンツの有効化」をクリックしていないと、VBA、マクロ、フォームイベント、COM操作が期待どおり動かないことがあります。
+
+この状態では、次のようなエラーがDB破損のように見える場合があります。
+
+- `Application.Run` が失敗する。
+- VBEコンパイルが失敗する。
+- フォームやVBAの保存が失敗する。
+- `データベースの Visual Basic for Applications プロジェクトが破損しています。` と表示される。
+
+本当に破損している可能性もありますが、まずは作業コピーをGUIで開き、「コンテンツの有効化」をクリックしたうえで、VBEの `デバッグ -> コンパイル` を確認します。
+
+詳しくは [コンテンツの有効化を確認する](requirements/enable-active-content.md) を参照してください。
+
 ## 起動処理の扱い
 
 自動起動を止めるために、DB側の `AutoExec`、`StartUp`、起動用関数を直接書き換える方法は、戻し忘れのリスクがあります。
@@ -152,10 +167,11 @@ End Function
 
 推奨優先順位:
 
-1. GUI/VBE作業: `/cmd SKIP_AUTOEXEC`
-2. フォールバック: Shift-bypass
-3. COMでVBA実行が必要: `AutomationSecurity = 1`
-4. GUI確認だけでマクロ停止したい: `AutomationSecurity = 3`
+1. GUI/VBE作業: コンテンツの有効化を確認する
+2. GUI/VBE作業: `/cmd SKIP_AUTOEXEC`
+3. フォールバック: Shift-bypass
+4. COMでVBA実行が必要: `AutomationSecurity = 1`
+5. GUI確認だけでマクロ停止したい: `AutomationSecurity = 3`
 
 注意:
 
