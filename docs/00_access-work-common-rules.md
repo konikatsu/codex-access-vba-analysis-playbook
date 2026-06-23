@@ -42,6 +42,36 @@ $access.OpenCurrentDatabase($dbPath)
 - 起動フォームのLoadイベントなど、マクロ以外の起動処理は止まらない場合があります。
 - `Application.Run` でVBAを実行したい作業には向きません。
 
+## 1.5. Accessの信頼設定をDB破損より先に疑う
+
+VBE/COM操作で不可解なエラーが出た場合、いきなりDB破損やVBAプロジェクト破損と決めつけないでください。
+
+先に確認すること:
+
+- 画面上部の「コンテンツの有効化」をクリック済みか。
+- VBEで `デバッグ -> コンパイル` が通るか。
+- `VBA プロジェクト オブジェクト モデルへのアクセスを信頼する` がONか。
+- COMでVBAを実行する確認に `AutomationSecurity = 3` を使っていないか。
+
+典型的なNG:
+
+- 「コンテンツの有効化」を確認せず、`VBAプロジェクトが破損しています` をDB破損扱いする。
+- `ActiveVBProject = null` を見て、すぐにVBE自動編集不能と判断する。
+- 非表示COMで重いフォームを開き、タイムアウト原因を見えないまま推測する。
+
+正しい順番:
+
+```text
+1. 作業コピーをGUIで開く
+2. コンテンツの有効化を確認する
+3. VBEで手動コンパイルする
+4. VBAプロジェクト オブジェクトモデルへのアクセス信頼を確認する
+5. COMでは AutomationSecurity=1 で短い確認だけ行う
+6. それでも失敗する場合に、DB破損やフォーム定義破損を疑う
+```
+
+詳しくは [コンテンツの有効化を確認する](requirements/00_enable-active-content.md) を参照してください。
+
 ## 2. `/cmd SKIP_AUTOEXEC` を組み込む
 
 GUI/VBEで開発モード起動したい場合は、DB側に `/cmd SKIP_AUTOEXEC` を受ける入口を作ります。
@@ -111,11 +141,13 @@ Access解析の最初の流れは、次を標準にします。
 ```text
 0. stage0_xxx 作業コピーを作成する
 1. AutomationSecurity = 3 で安全に開き、起動時に何が動くか確認する
-2. stage0_xxx に /cmd SKIP_AUTOEXEC 分岐を組み込む
-3. /cmd SKIP_AUTOEXEC で開き、起動処理が止まることを確認する
-4. 資産出力ツールを組み込む
-5. AutomationSecurity = 1 で開き、資産出力ツールを実行する
-6. 出力結果を確認し、stage0_success として保存する
+2. GUIでコンテンツの有効化とVBE手動コンパイルを確認する
+3. VBAプロジェクト オブジェクトモデルへのアクセス信頼を確認する
+4. stage0_xxx に /cmd SKIP_AUTOEXEC 分岐を組み込む
+5. /cmd SKIP_AUTOEXEC で開き、起動処理が止まることを確認する
+6. 資産出力ツールを組み込む
+7. AutomationSecurity = 1 で開き、資産出力ツールを実行する
+8. 出力結果を確認し、stage0_success として保存する
 ```
 
 ## 6. 危険操作前に書くこと
