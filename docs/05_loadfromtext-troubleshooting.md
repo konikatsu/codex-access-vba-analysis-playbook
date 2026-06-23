@@ -1,4 +1,4 @@
-# LoadFromTextトラブルシュート
+﻿# LoadFromTextトラブルシュート
 
 `LoadFromText` はAccessオブジェクトをテキストから取り込むための便利なAPIですが、失敗理由が分かりにくいことがあります。
 

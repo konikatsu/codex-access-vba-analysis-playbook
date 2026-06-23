@@ -1,4 +1,4 @@
-# ExportAnalysisInfoを使える状態にする手順
+﻿# ExportAnalysisInfoを使える状態にする手順
 
 ## 目的
 
@@ -179,10 +179,10 @@ Defines<DB名>\
 Start-Process msaccess.exe "`"C:\work\sample\app.accdb`" /cmd SKIP_AUTOEXEC"
 ```
 
-詳しくは [起動処理を止めて開発モードで開く](startup-bypass.md) を参照してください。
+詳しくは [起動処理を止めて開発モードで開く](01_startup-bypass.md) を参照してください。
 
 ## 次に読む
 
 `ExportAnalysisInfo` が実行できるようになったら、次に進みます。
 
-- [Access資産をAI向けにエクスポートする](export-access-assets-for-ai.md)
+- [Access資産をAI向けにエクスポートする](03_export-access-assets-for-ai.md)

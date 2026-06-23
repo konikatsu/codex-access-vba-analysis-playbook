@@ -1,4 +1,4 @@
-# sqlcmdを使えるようにする
+﻿# sqlcmdを使えるようにする
 
 SQL ServerのDDL確認やクエリ実行では、`sqlcmd` があると便利です。
 

@@ -1,4 +1,4 @@
-# sqlpackageで既存SQL Server DBをDocker SQL Serverへ移行する
+﻿# sqlpackageで既存SQL Server DBをDocker SQL Serverへ移行する
 
 既存のSQL Serverデータベースを、ローカルのDocker SQL Serverへコピーする手順です。
 Accessのリンクテーブルや既存アプリのテスト環境を、本物のSQL Serverから切り離したい場合に使います。

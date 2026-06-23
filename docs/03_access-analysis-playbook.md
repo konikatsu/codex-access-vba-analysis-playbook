@@ -1,10 +1,10 @@
-# Access解析プレイブック
+﻿# Access解析プレイブック
 
 Access `.accdb` / `.mdb` をAIエージェントで解析するときの標準手順です。
 
 作業前に、共通ルールも確認してください。
 
-- [Access作業共通ルール](access-work-common-rules.md)
+- [Access作業共通ルール](00_access-work-common-rules.md)
 
 ## 最初の原則
 

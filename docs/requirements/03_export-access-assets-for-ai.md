@@ -1,4 +1,4 @@
-# Access資産をAI向けにエクスポートする
+﻿# Access資産をAI向けにエクスポートする
 
 ## 目的
 
@@ -23,7 +23,7 @@ AIが見るべき対象:
 
 このページは、対象DBで `ExportAnalysisInfo` が実行できる状態になっている前提のエクスポート手順です。
 
-まだ実行できない場合は、先に [ExportAnalysisInfoを使える状態にする手順](import-analysis-module.md) を実施します。
+まだ実行できない場合は、先に [ExportAnalysisInfoを使える状態にする手順](02_import-analysis-module.md) を実施します。
 
 まずは次の流れで実行します。
 

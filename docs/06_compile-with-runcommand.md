@@ -1,4 +1,4 @@
-# RunCommand(126)でコンパイルする
+﻿# RunCommand(126)でコンパイルする
 
 Access VBAを外部COMからコンパイルする場合、次を使えます。
 
