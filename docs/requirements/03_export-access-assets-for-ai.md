@@ -182,3 +182,8 @@ rg -n "SELECT|INSERT|UPDATE|DELETE|FROM|JOIN" "C:\work\exports\app.accdb\Latest"
 - 出力先はフォルダにする。
 - `Latest` は最新の解析結果として扱う。
 - 日本語ファイルは文字コードに注意する。
+- 典型的には、VBAモジュール (`acModule`) はCP932/SJIS系、フォーム (`acForm`) / レポート (`acReport`) はUTF-16 LE with BOMで出ることが多い。
+- `SaveAsText` 出力をSJIS/CP932やUTF-8と決め打ちしない。`FF FE` で始まる場合はUTF-16 LEとして読む。
+- AI向けにUTF-8へ変換する場合は、生の出力を上書きせず、`*_utf8_fixed` のような別フォルダへ作成する。
+- `_utf8` というフォルダ名だけで変換済みと判断しない。変換後にNULLバイトが残っていないか確認する。
+- 詳しくは [Accessテキスト資産の文字コード](../10_access-text-encoding.md) を参照する。

@@ -1,4 +1,4 @@
-﻿# Access作業共通ルール
+# Access作業共通ルール
 
 CodexなどのAIエージェントでAccess DBを解析・修正・検証するときの共通ルールです。
 
@@ -223,21 +223,30 @@ Access解析の最初の流れは、次を標準にします。
 
 Access/VBA資産は文字化けしやすいため、文字コードを明示します。
 
+最重要:
+
+- Accessの `SaveAsText` / `LoadFromText` 対象を、SJIS/CP932前提で決め打ちしない。
+- 先頭バイトを確認してから読む。
+- 典型的には、VBAモジュール (`acModule`) はCP932/SJIS系、フォーム (`acForm`) / レポート (`acReport`) はUTF-16 LE with BOMで出ることが多い。
+- `FF FE` で始まる `SaveAsText` 出力は UTF-16 LE として扱う。
+- `V<NUL>e<NUL>r<NUL>s<NUL>i<NUL>o<NUL>n<NUL>` や `V<NUL>e<NUL>r...` のように見える場合は、UTF-16系を別エンコードとして誤読している可能性が高い。
+- AI向けにUTF-8へ変換する場合は、生の出力を上書きせず、別フォルダに変換済みコピーを作る。
+
 推奨:
 
-- Accessの `SaveAsText` / `LoadFromText` 対象はSJIS/CP932前提で扱う。
-- 日本語を含む `.ps1` もSJIS/CP932で保存する運用に統一する。
-- PowerShellでAccess資産を読む/書く場合は
-  `[System.Text.Encoding]::GetEncoding(932)` を明示する。
+- PowerShellでAccess資産を読む/書く場合は、ファイルごとにBOM/NULLバイトを見てエンコードを選ぶ。
+- `FF FE` の場合は `[System.Text.Encoding]::Unicode` を明示する。
+- BOMなしでCP932が疑われる場合だけ `[System.Text.Encoding]::GetEncoding(932)` を使う。
 - MarkdownやPythonはUTF-8でよい。
 
-例:
+判定例:
 
 ```powershell
-$encoding = [System.Text.Encoding]::GetEncoding(932)
-$text = [System.IO.File]::ReadAllText($path, $encoding)
-[System.IO.File]::WriteAllText($path, $text, $encoding)
+$bytes = [System.IO.File]::ReadAllBytes($path)
+($bytes[0..15] | ForEach-Object { $_.ToString('X2') }) -join ' '
 ```
+
+詳しくは [Accessテキスト資産の文字コード](10_access-text-encoding.md) を参照してください。
 
 ## 9. SQL Server接続
 

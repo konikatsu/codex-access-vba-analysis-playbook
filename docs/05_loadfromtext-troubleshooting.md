@@ -1,4 +1,4 @@
-﻿# LoadFromTextトラブルシュート
+# LoadFromTextトラブルシュート
 
 `LoadFromText` はAccessオブジェクトをテキストから取り込むための便利なAPIですが、失敗理由が分かりにくいことがあります。
 
@@ -24,6 +24,28 @@ VBEの手動インポートでは `.bas` を使います。
 `LoadFromText` では、Accessの `SaveAsText` 形式に近い `.mdl` を使うほうが安定します。
 
 ## よくある失敗
+
+### 文字化けしている
+
+`SaveAsText` で出したフォームやモジュールが次のように見える場合、文字コードの誤読を疑います。
+
+```text
+V<NUL>e<NUL>r<NUL>s<NUL>i<NUL>o<NUL>n<NUL> <NUL>=<NUL>2<NUL>1<NUL>
+```
+
+確認すること:
+
+- 対象がVBAモジュール (`acModule`) か、フォーム/レポート (`acForm` / `acReport`) か。
+- VBAモジュールならCP932/SJIS系、フォーム/レポートならUTF-16 LE with BOMの可能性をまず考える。
+- 先頭バイトが `FF FE` ではないか。
+- 本文にNULLバイト `00` が大量に残っていないか。
+- UTF-16 LEのファイルを `-Encoding UTF8` やCP932として読んでいないか。
+- `_utf8` というフォルダ名だけで、UTF-8変換済みとして扱っていないか。
+
+`LoadFromText` に戻すファイルは、できるだけAccessが `SaveAsText` で出した形式に寄せます。
+AI向けUTF-8コピーは解析用として扱い、そのまま取り込み用に使う前提にしないでください。
+
+詳しくは [Accessテキスト資産の文字コード](10_access-text-encoding.md) を参照してください。
 
 ### 予約済みエラー
 
