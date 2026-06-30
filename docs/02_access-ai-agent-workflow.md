@@ -191,6 +191,38 @@ AIエージェントは、Accessの連続フォーム内にある小さなボタ
 
 これはAIのためだけではなく、利用者にとっても分かりやすいUIになります。
 
+## ボタン処理をテストしやすくする
+
+AIエージェントにAccessフォームをテストさせる場合、実際のマウスクリック、座標クリック、`SendKeys` に依存すると不安定になりやすいです。
+
+ボタンの `Click` イベントは `Private` のままにし、クリック時に実行する処理をフォーム内の `Public Sub` / `Public Function` に切り出します。
+
+```vb
+Private Sub btnSave_Click()
+    Call ExecuteSave
+End Sub
+
+Public Sub ExecuteSave()
+    ' 保存処理本体
+End Sub
+```
+
+テスト側はフォームを開いてから、クリックイベントではなく実処理を直接呼びます。
+
+```vb
+DoCmd.OpenForm "mnt_Estimate_Entry", acNormal
+Call Forms("mnt_Estimate_Entry").ExecuteSave
+```
+
+この形にすると、フォーカス、画面位置、リボン状態、確認ダイアログの有無に左右されにくくなります。
+
+注意点:
+
+- `btnSave_Click` 自体を `Public` にする必要はありません。
+- 業務処理のテストには強いですが、ボタンと処理の配線ミスは検出しにくいです。
+- 配線確認として、最後に1回はGUI上でボタンを押して、`Click` イベントから同じPublic処理が呼ばれることを確認します。
+- 入力チェックが `BeforeUpdate` や `AfterUpdate` に分散している場合は、Public処理側にも必要な前提チェックを置きます。
+
 ## SQL Serverテスト環境
 
 本物のSQL Serverへ直接接続して開発するより、Docker SQL Serverへ複製したテストDBを使う方が安全です。
