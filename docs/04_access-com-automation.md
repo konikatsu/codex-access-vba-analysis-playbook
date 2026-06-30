@@ -53,6 +53,25 @@ $access.AutomationSecurity = 1
 `3` はマクロ実行を強制無効化する目的に向きます。  
 その一方で、DBを開いた後に `Application.Run` でVBAを実行したい作業では、実行自体も止まる可能性があるため、目的に応じて使い分けます。
 
+重要:
+
+- `AutomationSecurity = 1` はVBA実行を許可しますが、AutoExecや起動処理をスキップしません。
+- `AutomationSecurity = 1` で開くと、DB側の初期処理、起動フォーム、外部DB接続が通常どおり動く場合があります。
+- `Application.Run` が不要なフォーム/レポートの `LoadFromText`、`SaveAsText`、コンパイル確認だけなら、まず `AutomationSecurity = 3` を検討します。
+- `Application.Run` が必要で `AutomationSecurity = 1` を使う場合は、作業コピー横の `.ini` や接続設定がテスト環境を向いていること、または `/cmd SKIP_AUTOEXEC` 相当の起動抑止が効くことを確認します。
+
+典型的な失敗:
+
+```text
+AutomationSecurity = 1 で作業コピーを開く
+-> AutoExec/初期処理が動く
+-> 作業コピー横に必要な ini がない
+-> 旧SQL Serverや本番接続へ行く
+-> COMがタイムアウト/RPCエラーになる
+```
+
+この場合、`LoadFromText` やフォーム定義の破損ではなく、起動処理と接続設定の問題として切り分けます。
+
 ## コンテンツの有効化
 
 AccessをGUIで開いたときにセキュリティ警告が出ている場合、「コンテンツの有効化」をクリックしていないと、VBA、マクロ、フォームイベント、COM操作が期待どおり動かないことがあります。

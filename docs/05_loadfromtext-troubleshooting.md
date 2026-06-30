@@ -23,6 +23,23 @@ $access.LoadFromText(5, 'ToolsModule', 'C:\work\access-project\tools\ToolsModule
 VBEの手動インポートでは `.bas` を使います。  
 `LoadFromText` では、Accessの `SaveAsText` 形式に近い `.mdl` を使うほうが安定します。
 
+## 文字コードの基本
+
+`LoadFromText` に戻すファイルは、Accessが `SaveAsText` で出した形式に寄せます。
+
+実務上よく見る組み合わせ:
+
+```text
+acModule             -> CP932/SJIS系
+acForm / acReport    -> UTF-16 LE with BOM
+```
+
+フォームやレポートをCP932として編集・保存し直すと、`LoadFromText` が通ってもフォーム定義や日本語文字列が壊れることがあります。
+逆に、モジュールをUTF-16 LEとして扱うと、VBAコードの文字化けやインポート失敗につながることがあります。
+
+最終判断は、必ず対象ファイルの先頭バイトで行います。
+詳しくは [Accessテキスト資産の文字コード](10_access-text-encoding.md) を参照してください。
+
 ## よくある失敗
 
 ### 文字化けしている
@@ -36,7 +53,7 @@ VBEの手動インポートでは `.bas` を使います。
 確認すること:
 
 - 対象がVBAモジュール (`acModule`) か、フォーム/レポート (`acForm` / `acReport`) か。
-- VBAモジュールならCP932/SJIS系、フォーム/レポートならUTF-16 LE with BOMの可能性をまず考える。
+- VBAモジュールならCP932/SJIS系、フォーム/レポートならUTF-16 LE with BOMをまず考える。
 - 先頭バイトが `FF FE` ではないか。
 - 本文にNULLバイト `00` が大量に残っていないか。
 - UTF-16 LEのファイルを `-Encoding UTF8` やCP932として読んでいないか。
