@@ -57,7 +57,8 @@ $access.AutomationSecurity = 1
 
 - `AutomationSecurity = 1` はVBA実行を許可しますが、AutoExecや起動処理をスキップしません。
 - `AutomationSecurity = 1` で開くと、DB側の初期処理、起動フォーム、外部DB接続が通常どおり動く場合があります。
-- `Application.Run` が不要なフォーム/レポートの `LoadFromText`、`SaveAsText`、コンパイル確認だけなら、まず `AutomationSecurity = 3` を検討します。
+- `Application.Run` が不要なフォーム/レポートの `LoadFromText`、`SaveAsText` だけなら、まず `AutomationSecurity = 3` を検討します。
+- VBA実行を伴う動作テスト、`Application.Run`、実行状態を前提にした確認では `AutomationSecurity = 3` を使いません。
 - `Application.Run` が必要で `AutomationSecurity = 1` を使う場合は、作業コピー横の `.ini` や接続設定がテスト環境を向いていること、または `/cmd SKIP_AUTOEXEC` 相当の起動抑止が効くことを確認します。
 
 典型的な失敗:
@@ -197,7 +198,7 @@ End Function
 
 推奨優先順位:
 
-1. GUI/VBE作業: コンテンツの有効化を確認する
+1. GUI/VBE作業: コンテンツの有効化、または信頼済み場所を確認する
 2. GUI/VBE作業: `/cmd SKIP_AUTOEXEC`
 3. フォールバック: Shift-bypass
 4. COMでVBA実行が必要: `AutomationSecurity = 1`
@@ -208,7 +209,21 @@ End Function
 - COMの `OpenCurrentDatabase` では、通常 `Command()` は期待どおり渡りません。
 - `/cmd SKIP_AUTOEXEC` を使う場合は、`msaccess.exe` の起動引数として渡します。
 - 標準コマンドは `Start-Process msaccess.exe "`"C:\path\to\db.accdb`" /cmd SKIP_AUTOEXEC"` の形式にします。
+- `/cmd SKIP_AUTOEXEC` はAccessのセキュリティ警告を解除しません。
+- VBA/マクロ/フォームイベントの動作テストでは、DBを置くフォルダをAccessの信頼済み場所に追加するか、画面上で「コンテンツの有効化」を行います。
 - `AutomationSecurity = 1` はVBA実行用であり、初期処理をスキップする仕組みではありません。
+- `AutomationSecurity = 3` はマクロを無効化するため、VBA/フォームイベントの動作テストには使いません。
+
+例:
+
+```powershell
+# 起動処理だけ止め、VBA/フォームイベントは有効な状態でGUIテストする。
+# 前提: C:\work\access-project\ がAccessの信頼済み場所に登録済み。
+Start-Process msaccess.exe "`"C:\work\access-project\Sample.accdb`" /cmd SKIP_AUTOEXEC"
+```
+
+このコマンドでセキュリティ警告が出る場合、`/cmd SKIP_AUTOEXEC` の失敗ではありません。
+信頼済み場所またはコンテンツ有効化の問題として切り分けます。
 
 ## 権限付き実行
 
