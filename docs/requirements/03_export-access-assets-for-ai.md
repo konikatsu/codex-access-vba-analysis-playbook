@@ -4,6 +4,8 @@
 
 Access DB内の資産をテキスト化し、AIエージェントが検索・解析できる状態にします。
 
+このページは、人間が手作業でAccessを操作するための手順ではありません。人間はCodexへ対象DBと目的を指示し、Codexが作業コピーの準備、Access操作、`ExportAnalysisInfo` の実行、出力結果の確認を行う前提です。
+
 AIが見るべき対象:
 
 - 標準モジュール
@@ -25,18 +27,21 @@ AIが見るべき対象:
 
 まだ実行できない場合は、先に [ExportAnalysisInfoを使える状態にする手順](02_import-analysis-module.md) を実施します。
 
-まずは次の流れで実行します。
+Codexは、まず次の流れで実行します。
 
 ```text
-1. Access DBを開発モードで開く
-2. イミディエイトウィンドウで ExportAnalysisInfo を実行する
-3. DBと同じフォルダに Defines<DB名>\Latest ができる
-4. AIには Latest フォルダを読ませる
+1. 対象DBの作業コピーを用意する
+2. Access DBを開発モードで開く
+3. ExportAnalysisInfoを実行する
+4. DBと同じフォルダに Defines<DB名>\Latest ができる
+5. Codexが Latest フォルダを確認し、AI解析に使う
 ```
 
-## イミディエイトウィンドウから実行する
+## CodexがExportAnalysisInfoを実行する
 
-VBEでイミディエイトウィンドウを開きます。
+可能であれば、CodexはAccess COMや自動操作で `ExportAnalysisInfo` を実行します。
+
+環境によりCOM実行が難しい場合だけ、CodexはVBEでイミディエイトウィンドウを開きます。
 
 ```text
 Ctrl + G
@@ -44,7 +49,7 @@ Ctrl + G
 
 ログを見やすくするため、実行前にイミディエイトウィンドウをクリアします。
 
-次を入力してEnterを押します。
+次を入力してEnterを押します。これは人間に作業を依頼する意味ではなく、Codexが必要に応じて実行する操作です。
 
 ```vb
 ExportAnalysisInfo

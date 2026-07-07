@@ -10,6 +10,8 @@ ExportAnalysisInfo
 
 `ExportAnalysisInfo` は、Access DB内のフォーム、レポート、モジュール、クエリ、テーブル定義、リレーション、参照設定などを、AIが読めるテキストとして出力するための手順です。
 
+このページは、人間が手作業でVBEを操作することを前提にした依頼書ではありません。人間はCodexへ対象DBの場所と目的を指示し、CodexがAccess COM、VBE操作、または必要な自動操作で `ExportAnalysisInfo` を使える状態にします。
+
 ## 使うファイル
 
 このリポジトリには、3種類のファイルを用意しています。
@@ -18,7 +20,7 @@ ExportAnalysisInfo
 - VBE貼り付け用: [`tools/GsTools_analysisinfo_for_vbe_paste.bas`](../../tools/GsTools_analysisinfo_for_vbe_paste.bas)
 - COM / `LoadFromText` 用: [`tools/GsTools_analysisinfo_loadfromtext.mdl`](../../tools/GsTools_analysisinfo_loadfromtext.mdl)
 
-まずは `tools/GsTools_analysisinfo.bas` を使う方法がおすすめです。
+まずは `tools/GsTools_analysisinfo.bas` を使う方法がおすすめです。CodexがCOMで追加できる場合は、`.mdl` を使った `LoadFromText` 方式を優先します。
 
 ## 前提
 
@@ -34,6 +36,8 @@ Start-Process msaccess.exe "`"C:\work\sample\app.accdb`" /cmd SKIP_AUTOEXEC"
 ```
 
 ## 方法1: VBEから追加する
+
+COMで追加できない場合に、CodexがVBE操作で追加します。
 
 対象DBをAccessで開きます。
 
@@ -59,7 +63,7 @@ GsTools_analysisinfo
 
 ## 方法2: VBEに貼り付ける
 
-VBEのファイルインポートが使えない場合は、標準モジュールを新規作成して貼り付けます。
+VBEのファイルインポートが使えない場合は、Codexが標準モジュールを新規作成して貼り付けます。
 
 ```text
 VBE
@@ -81,7 +85,7 @@ GsTools_analysisinfo
 
 ## 方法3: COMからLoadFromTextで追加する
 
-CodexなどからPowerShell COMで追加する場合は、`.mdl` を使います。
+CodexなどからPowerShell COMで追加する場合は、`.mdl` を使います。AIエージェントが扱える環境では、この方法を優先します。
 
 ```powershell
 $dbPath = 'C:\work\sample\app.accdb'
