@@ -337,6 +337,20 @@ powershell -ExecutionPolicy Bypass -File ".\examples\inspect-access-text-encodin
 - DDLやデータ更新SQLは、実行前にSQL全文と対象DBを確認する。
 - 既存の売上系など、触らないと決めたテーブルは明示して守る。
 
+## 9.5. Web化画面の表示崩れ
+
+Web化後の画面で表示崩れが起きた場合、見た目だけでデータ起因と断定しません。
+原因説明は「推定」と「確認済み」を分け、DB実値、HTML構造、CSSの順で切り分けます。
+
+注意:
+
+- 先頭空白や改行が原因に見えても、DB実値を確認するまで断定しない。
+- 日本語テーブル名/列名がコンソールで文字化けする場合、表示された文字列を正として扱わない。
+- 一覧プレビューの2行省略では、`display: -webkit-box` / `-webkit-line-clamp` が table cell や `white-space: pre-wrap` と相性悪く見える場合がある。
+- 業務一覧では、まず `display: block`、`max-height`、`overflow: hidden` のような単純なCSSで切り分ける。
+
+詳しくは [Access Web化UI表示崩れの切り分け](13_access-web-ui-troubleshooting.md) を参照してください。
+
 ## 10. 詰まった時
 
 同じ操作を繰り返す前に、Access共通playbook担当へ報告します。
