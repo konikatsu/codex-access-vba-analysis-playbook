@@ -336,6 +336,11 @@ powershell -ExecutionPolicy Bypass -File ".\examples\inspect-access-text-encodin
 - パスワードや資格情報をログやチャットに出さない。
 - DDLやデータ更新SQLは、実行前にSQL全文と対象DBを確認する。
 - 既存の売上系など、触らないと決めたテーブルは明示して守る。
+- `sqlcmd` がTLSや証明書まわりで失敗しても、SQL Server自体へ接続不能と断定しない。
+- Web/PHP/ODBCで成功している接続は、同じ接続文字列をPowerShell ODBCで再現して実データ確認を優先する。
+- 接続失敗の説明は、確認済み事実、推定、暫定回避を分ける。
+
+詳しくは [sqlcmdを使えるようにする](07_sqlcmd-setup.md) を参照してください。
 
 ## 9.5. Web化画面の表示崩れ
 
