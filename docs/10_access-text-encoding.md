@@ -140,6 +140,28 @@ $bytes = Get-Content -LiteralPath $dst -Encoding Byte -TotalCount 1000
 - ファイル名が正しく日本語表示されることを、本文エンコードが正しい証拠にする。
 - バイト確認のために、長い `powershell.exe -Command ... ReadAllBytes ... ToString('X2')` を直接実行する。
 
+## Web化後のPHP/HTMLを編集する場合
+
+Access資産をWeb化すると、日本語テーブル名、列名、フォームラベル、Access由来の画面文言がPHP/HTML/SQL内に残ることがあります。
+実ファイルがUTF-8でも、PowerShellの表示、コンソールコードページ、読み取り方法の組み合わせで、日本語がmojibakeして見える場合があります。
+
+この状態で、コンソールに見えている文字化け日本語を `apply_patch` の文脈に使うと、実ファイルの文字列と一致せず `verification failed` になりやすいです。
+同じパッチを繰り返す前に、編集アンカーを変えてください。
+
+推奨:
+
+- `apply_patch` の文脈には、ASCIIで安定している関数名、変数名、HTML class/id、SQLの英数字テーブル名、固定の記号構造を使う。
+- 日本語を変更したい場合も、差分範囲はASCIIアンカーで狭める。
+- `Get-Content -Encoding UTF8 -Raw` で読み直す。
+- 表示が疑わしい場合は、`Format-Hex` やエディタ表示で実バイト列を確認する。
+- PHPなら、編集後に構文確認を行う。
+
+避けること:
+
+- PowerShellに表示された文字化け日本語を、正しい文脈文字列としてpatchに貼る。
+- 日本語ラベルだけを広い文脈にしてpatchを当て続ける。
+- `verification failed` 後に、同じ文字化け文脈で何度も再試行する。
+
 ## `LoadFromText` に戻す場合
 
 `LoadFromText` に戻すファイルは、できるだけAccessが `SaveAsText` で出した形式に寄せます。
