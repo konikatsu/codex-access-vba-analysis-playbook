@@ -92,3 +92,25 @@ PowerShellやコンソール表示で文字化けしたり、`????` のように
 
 誤った推定をした場合は、確認結果と訂正を残してください。
 同じ表示崩れを次の担当がデータ起因と誤認しないようにします。
+
+## 6. PHP構文確認は実行環境に合わせる
+
+Web化プロジェクトがDockerで動いている場合、WindowsホストのPATHに `php` が無いことは異常ではありません。
+毎回ローカルPATHやApache配下のPHPを探すのではなく、プロジェクトの実行環境で構文確認します。
+
+例:
+
+```powershell
+docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}"
+docker exec <php-container> php -v
+docker exec <php-container> php -l /path/in/container/file.php
+```
+
+記録すること:
+
+- PHPを実行した場所: Windowsホスト / Dockerコンテナ / サーバ
+- コンテナ名またはcomposeサービス名
+- ホスト側パスとコンテナ内パスの対応
+- `php -l` の結果
+
+既知の環境前提がある場合は、「PATHにphpがない」を毎回報告せず、既定の構文確認コマンドへ直行してください。
