@@ -98,12 +98,33 @@ PowerShellやコンソール表示で文字化けしたり、`????` のように
 Web化プロジェクトがDockerで動いている場合、WindowsホストのPATHに `php` が無いことは異常ではありません。
 毎回ローカルPATHやApache配下のPHPを探すのではなく、プロジェクトの実行環境で構文確認します。
 
+ただし、Dockerコンテナ内のアプリ配置がbind mountとは限りません。
+Dockerfileの `COPY` でイメージ作成時にファイルを取り込んでいる場合、実行中コンテナ内のPHPを直接 `php -l` しても、未再ビルドのローカル最新版を検査したことにはなりません。
+
 例:
 
 ```powershell
 docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}"
 docker exec <php-container> php -v
-docker exec <php-container> php -l /path/in/container/file.php
+```
+
+まず、ローカルファイルがコンテナへ同期されているか確認します。
+
+```powershell
+docker inspect <php-container>
+```
+
+確認ポイント:
+
+- `Mounts` に対象ディレクトリのbind mountがあるか。
+- `HostConfig.Binds` に対象ディレクトリのbind mountがあるか。
+- Dockerfileが `COPY web/... /var/www/...` のようにイメージ作成時コピーになっていないか。
+
+bind mountされていない場合は、ローカル最新版をコンテナの一時パスへコピーしてから `php -l` します。
+
+```powershell
+docker cp C:\work\app\file.php <php-container>:/tmp/lint-target.php
+docker exec <php-container> php -l /tmp/lint-target.php
 ```
 
 記録すること:
@@ -111,6 +132,8 @@ docker exec <php-container> php -l /path/in/container/file.php
 - PHPを実行した場所: Windowsホスト / Dockerコンテナ / サーバ
 - コンテナ名またはcomposeサービス名
 - ホスト側パスとコンテナ内パスの対応
+- bind mountか、DockerfileのCOPYか
+- 構文確認した対象: 実行中コンテナ内の既存ファイル / ローカル最新版をdocker cpした一時ファイル
 - `php -l` の結果
 
 既知の環境前提がある場合は、「PATHにphpがない」を毎回報告せず、既定の構文確認コマンドへ直行してください。
