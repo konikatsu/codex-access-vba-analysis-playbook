@@ -157,6 +157,25 @@ docker ps
 sqlserver-access-test01   mcr.microsoft.com/mssql/server:2022-latest   Up ...   0.0.0.0:14333->1433/tcp
 ```
 
+停止している場合:
+
+```powershell
+docker ps -a --filter "name=sqlserver-access-test01"
+docker start sqlserver-access-test01
+```
+
+`localhost,14333` が接続拒否になる場合、まずDocker SQL Serverコンテナが起動しているか確認します。
+停止しているだけなら、実装不具合ではなくテスト環境の起動状態の問題です。
+毎回ユーザーへ長く報告せず、既知事項として起動してからテストを続けます。
+
+報告する場合は、短く書きます。
+
+```text
+Docker SQL Serverは停止していたため起動して確認しました。
+```
+
+起動後も接続できない、DBが復元されていない、ポートが競合している、データが期待と違う場合は、新しい問題として切り分けます。
+
 接続確認:
 
 ```powershell
