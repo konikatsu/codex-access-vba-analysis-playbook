@@ -55,6 +55,10 @@ ForeColor
 BorderColor
 OldBorderStyle
 SpecialEffect
+Locked
+Enabled
+TabStop
+BackStyle
 FontName
 FontSize
 FontWeight
@@ -126,6 +130,32 @@ Parent hidden value holder: txtTotalAmount
 Subform footer display: =[Parent]![txtTotalAmount]
 ```
 
+## 帳票の列境界
+
+帳票の表は、見出し、明細、継続ページ見出しを目視で個別調整しない。
+列境界値を共通化し、縦罫線が数twipsずれる状態を防ぐ。
+
+列ごとに次を揃える。
+
+```text
+Left(header) = Left(detail)
+Width(header) = Width(detail)
+Right(header) = Right(detail)
+```
+
+確認対象:
+
+- 先頭ページの見出し
+- 明細行
+- 複数ページ帳票の継続ページ見出し
+- 集計欄、合計欄、小計欄
+
+PDF確認では、1ページで収まるデータと複数ページになるデータの両方を出力する。
+先頭ページだけでなく、改ページ後の見出し、明細、集計欄まで確認する。
+
+PDFを画像化したときに白いページが黒背景に見える場合は、PDF不良と決めつけない。
+レンダラーの透明度合成やビューア背景の可能性があるため、白背景へ合成した画像でも確認する。
+
 ## 配色
 
 配色は既存フォームからコピーする。
@@ -140,6 +170,36 @@ Subform footer display: =[Parent]![txtTotalAmount]
 - 削除ボタンや警告色
 
 基準フォームから `BackColor` を確認し、同じ値を使う。
+
+## 入力不可項目の見た目
+
+入力不可項目は、`Locked=True` にするだけでは既存画面へ揃わない。
+白背景、くぼみ、タブ停止が残っていると、利用者には入力可能欄のように見える。
+
+入力不可にする項目は、フォーム内で全件一覧化し、次をまとめて監査する。
+
+```text
+Locked
+Enabled
+TabStop
+SpecialEffect
+OldBorderStyle
+BackStyle
+BackColor
+```
+
+推奨:
+
+- 入力不可項目はフォーカス対象外にする。
+- フォーム背景上へフラットに表示する。
+- 入力不可項目の背景色や境界線は、基準フォームからコピーする。
+- 監査結果として、問題件数が0になるまでデザイン完了にしない。
+
+注意:
+
+- `SaveAsText` では、境界線が `OldBorderStyle` として出力される場合がある。
+- 存在しない `BorderStyle` 行を推測で挿入すると、`LoadFromText` 失敗の原因になる。
+- 手作業でプロパティ行を追加する場合は、基準フォームの実出力にあるプロパティ名を使う。
 
 ## 幅と見切れ
 
@@ -211,7 +271,9 @@ AllowDeletions = False
 12. 右側に不自然な余白がない
 13. ボタンが既存列に重なっていない
 14. 0件表示時の空行/誤操作がない
-15. 残課題があれば「完了」ではなく「保留」と明記した
+15. 入力不可項目の `Locked` / `TabStop` / `SpecialEffect` / `OldBorderStyle` / `BackStyle` / `BackColor` を監査済み
+16. 帳票は1ページPDFと複数ページPDFで、改ページ後の見出し、明細、集計欄まで確認済み
+17. 残課題があれば「完了」ではなく「保留」と明記した
 ```
 
 ## Codexへの指示例
