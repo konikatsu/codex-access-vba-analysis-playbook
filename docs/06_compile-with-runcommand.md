@@ -8,6 +8,22 @@ $access.RunCommand(126)
 
 `126` は `acCmdCompileAndSaveAllModules` です。
 
+## 合格条件
+
+`AutomationSecurity = 3` で `RunCommand(126)` が例外を返さないことだけを、VBEの「デバッグ -> コンパイル」と同等のPASS証拠にしてはいけません。
+コンパイル合否は、VBAを実行できる `AutomationSecurity = 1` の別セッションで確認します。
+
+変更したPublic関数がある場合は、コンパイル後に `Application.Run` でその関数を呼びます。対象は、引数なしで副作用を持たない確認関数、または専用の読み取り確認関数に限定します。
+
+次の2回を通してPASSとします。
+
+1. `AutomationSecurity = 1` で開き、`RunCommand(126)` と変更Public関数の実行を行う。
+2. Accessを終了し、同じDBを再オープンして、同じコンパイルと関数実行を行う。
+
+`AutomationSecurity = 1` はAutoExecや起動フォームを止めません。起動処理や接続ダイアログが検証を妨げる場合は、製品候補を変更せず、同一候補からAutoExecだけを除いた検証専用コピーを作ります。検証コピーでの変更やVBE正規化を製品候補へ戻しません。
+
+VBEを開く、コンパイルする、または`SaveAsText`を再実行すると、無関係な既存モジュールの識別子の大文字・小文字が正規化されることがあります。全`SaveAsText`差分は、基準ACCDBも同じ操作・同じ回数で再出力した対照と比較します。対象外の実差分が残る候補は採用しません。
+
 ## 使いどころ
 
 - 64bit対応後にVBA全体をコンパイルしたい。

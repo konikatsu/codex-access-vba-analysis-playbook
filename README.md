@@ -50,6 +50,8 @@ Microsoft Access / VBA の既存システムを、Codex などのAIエージェ�
 - Accessフォームのデザイン変更は、基準フォームの行高、色、枠線、フォント、列幅を採寸し、キャプチャ比較で確認する。
 - 明細グリッドに属する合計行は、親フォームではなくサブフォームのフッターへ置く。
 - Accessフォームの自動テストでは、物理クリックや `SendKeys` に依存せず、Clickイベントから呼ぶ実処理をPublicメソッド化して直接テストする。
+- 最小修正は成功baselineから名前付き作業コピーを作り、コンパイルは `AutomationSecurity = 1` で再オープン後まで確認する。`AutomationSecurity = 3` の例外なしだけをコンパイルPASSとしない。
+- スキーマ限定変更は、対象制約だけの冪等DDL、変更前後の行数・制約数比較、全`SaveAsText`差分を基本ゲートにする。新機能が既存機能の更新・削除を拘束する変更は原則禁止する。
 - DOCX成果物は、PDF/PNGへレンダリングして表、図、改ページの崩れを確認する。WindowsではLibreOfficeのCLIに `soffice.com` を優先する。
 - Web化画面の表示崩れは、見た目だけでデータ起因と断定せず、DB実値、HTML構造、CSSの順で切り分ける。
 - Gemini CLI / Antigravity CLIは調査・要約・一次レビューの補助として使い、最終判断、編集、テスト、pushはCodexが行う。個人Google OAuthのGemini CLI利用は対象外のため、Antigravity CLIへ移行する。
