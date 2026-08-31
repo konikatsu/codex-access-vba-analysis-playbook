@@ -113,7 +113,8 @@ Private Sub ExportTableDefinitions(ByVal filePath As String, ByVal logNo As Inte
         If ShouldExportObject(CStr(tdf.Name)) Then
             Print #fileNo, "TABLE " & tdf.Name
             Print #fileNo, "  Attributes: " & tdf.Attributes
-            If Len(tdf.Connect & "") > 0 Then Print #fileNo, "  Connect: " & tdf.Connect
+            ' Metadata only: do not use RecordCount, recordsets, domain aggregates, or RefreshLink.
+            If Len(tdf.Connect & "") > 0 Then Print #fileNo, "  Connect: " & DescribeLinkConnection(CStr(tdf.Connect))
             If Len(tdf.SourceTableName & "") > 0 Then Print #fileNo, "  SourceTableName: " & tdf.SourceTableName
             Print #fileNo, "  Fields:"
             For Each fld In tdf.Fields
@@ -281,6 +282,18 @@ Private Function SafePropertyValue(ByVal obj As Object, ByVal propertyName As St
 
 ErrHandler:
     SafePropertyValue = ""
+End Function
+
+Private Function DescribeLinkConnection(ByVal connectString As String) As String
+    Dim normalized As String
+
+    normalized = UCase$(Trim$(connectString))
+
+    If Left$(normalized, 5) = "ODBC;" Then
+        DescribeLinkConnection = "ODBC (details redacted)"
+    Else
+        DescribeLinkConnection = "linked table (details redacted)"
+    End If
 End Function
 
 Private Sub LogLine(ByVal logNo As Integer, ByVal message As String)
