@@ -144,8 +144,11 @@ DeleteObject
 | モジュール取り込み | `AutomationSecurity = 1` |
 | `Application.Run` 実行 | `AutomationSecurity = 1` |
 | `RunCommand(126)` コンパイル | `AutomationSecurity = 1` |
-| GUI確認でマクロを止めたい | `AutomationSecurity = 3` |
+| COM静的操作でマクロを無効化したい | 仮想Shift + `AutomationSecurity = 3` |
+| 構造メタデータだけを確認したい | DAO `OpenDatabase(copy, False, True)` |
 | 開発モードで通常起動したい | `/cmd SKIP_AUTOEXEC` |
+
+`AutomationSecurity = 3`だけで、起動フォームや信頼済みDBの全初期処理を止められるとは限りません。目的別の完全な手順は[Access修正の標準開発手順](15_access-development-workflow.md)を参照してください。
 
 開発モード起動の例:
 
@@ -157,7 +160,7 @@ DB側には、AutoExecから呼ばれる入口関数に次のような分岐を�
 
 ```vb
 Public Function AutoExecMain()
-    If InStr(1, Nz(Command(), ""), "SKIP_AUTOEXEC", vbTextCompare) > 0 Then
+    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
         Debug.Print "AutoExec skipped."
         Exit Function
     End If

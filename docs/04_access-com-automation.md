@@ -2,6 +2,8 @@
 
 PowerShellから `Access.Application` を使ってAccess DBを操作する場合の基本形です。
 
+この文書のコードはCOMの基本形です。起動バイパス、DAO経路、PID限定回収を含む実作業の標準は[Access修正の標準開発手順](15_access-development-workflow.md)を優先してください。`AutomationSecurity`の値だけでAutoExecや起動フォームを止められるとは判断しません。
+
 ## 最小形
 
 ```powershell
@@ -48,7 +50,7 @@ $access.AutomationSecurity = 1
 ```
 
 - 解析用モジュールを取り込んで `Application.Run` したい場合: `1`
-- AutoExecなどの起動マクロを止めて、GUI/VBEで安全に開きたい場合: `3`
+- COM静的操作でマクロを強制無効化したい場合: `3`。起動バイパスは仮想Shiftなどを別途使う
 
 `3` はマクロ実行を強制無効化する目的に向きます。  
 その一方で、DBを開いた後に `Application.Run` でVBAを実行したい作業では、実行自体も止まる可能性があるため、目的に応じて使い分けます。
@@ -59,7 +61,7 @@ $access.AutomationSecurity = 1
 - `AutomationSecurity = 1` で開くと、DB側の初期処理、起動フォーム、外部DB接続が通常どおり動く場合があります。
 - `Application.Run` が不要なフォーム/レポートの `LoadFromText`、`SaveAsText` だけなら、まず `AutomationSecurity = 3` を検討します。
 - VBA実行を伴う動作テスト、`Application.Run`、実行状態を前提にした確認では `AutomationSecurity = 3` を使いません。
-- `Application.Run` が必要で `AutomationSecurity = 1` を使う場合は、作業コピー横の `.ini` や接続設定がテスト環境を向いていること、または `/cmd SKIP_AUTOEXEC` 相当の起動抑止が効くことを確認します。
+- `Application.Run`が必要で`AutomationSecurity = 1`を使う場合は、作業コピー横の`.ini`や接続設定がテスト環境を向いていることと、仮想ShiftなどCOM経路用の起動抑止が効くことを確認します。`/cmd`は`OpenCurrentDatabase`へ直接渡せません。
 
 典型的な失敗:
 
@@ -106,9 +108,10 @@ Access COMで詰まったときに、次の順番で判断すると遠回りに�
 COM自動化では、まず次の方針を優先します。
 
 - DB本体の起動処理は原則触らない。
-- `OpenCurrentDatabase` の前に `AutomationSecurity = 1` を設定する。
-- それでもダイアログや業務処理が動く場合だけ、コピーDBで一時的な無効化を検討する。
-- 一時変更した場合は、変更箇所と戻し手順を記録する。
+- 作業前に環境フィンガープリントと起動前`MSACCESS.EXE`スナップショットを記録する。
+- 仮想Shiftで起動をバイパスし、`OpenCurrentDatabase`の前に用途に合う`AutomationSecurity`を設定する。
+- PIDは`hWndAccessApp`から直ちに取得し、終了時は記録したPIDだけを対象にする。
+- 構造メタデータだけならAccessを起動せず、DAO読み取り専用経路を使う。
 
 GUI/VBE作業では、DB内の起動処理を書き換える代わりに、Shiftキーを押下した状態でDBを開く補助スクリプトを使う方法があります。
 
@@ -120,16 +123,15 @@ powershell -ExecutionPolicy Bypass -File ".\examples\open-access-devmode.ps1" -D
 
 この方法なら、DB内の `AutoExec` や起動用関数を変更せずに、開発者モード相当で起動できます。
 
-もう一つの方法として、Access COMで起動し、`AutomationSecurity = 3` を設定してから `OpenCurrentDatabase` する方法があります。
+マクロを無効化した静的操作では、Access COMで`AutomationSecurity = 3`を設定してから`OpenCurrentDatabase`します。ただし、次の例は`AutomationSecurity`の制約確認用であり、完全な起動バイパスではありません。
 
 例:
 
 ```powershell
-powershell -Sta -ExecutionPolicy Bypass -File ".\examples\open-access-no-autoexec.ps1" -DatabasePath "C:\work\access-project\Sample.accdb"
+powershell -Sta -ExecutionPolicy Bypass -File ".\examples\open-access-no-autoexec.ps1" -DatabasePath "C:\work\access-project\Sample.accdb" -AcknowledgeStartupMayRun
 ```
 
-これは、DBをダブルクリックや `Start-Process` で直接開くのではなく、`Access.Application` から開く点が重要です。  
-ただし、起動処理がAutoExecマクロではなく起動フォームのLoadイベントやスタートアップ設定にある場合、これだけでは完全に止まらないことがあります。
+実作業では仮想Shift、PID記録、タイムアウト、後片付けを組み合わせます。起動フォームのLoadイベントやスタートアップ設定は、`AutomationSecurity = 3`だけでは止まらないことがあります。
 
 ## /cmd で解析用の起動モードを作る
 
@@ -167,7 +169,7 @@ Private Function IsSkipAutoExecMode() As Boolean
     cmd = Nz(Command(), "")
 
     IsSkipAutoExecMode = _
-        (InStr(1, cmd, "SKIP_AUTOEXEC", vbTextCompare) > 0)
+        (StrComp(Trim$(cmd), "SKIP_AUTOEXEC", vbTextCompare) = 0)
 End Function
 ```
 
@@ -182,7 +184,7 @@ Start-Process msaccess.exe "`"C:\work\access-project\Sample.accdb`" /cmd SKIP_AU
 ```vb
 Public Function InitialProcess()
 
-    If InStr(1, Nz(Command(), ""), "SKIP_AUTOEXEC", vbTextCompare) > 0 Then
+    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
         Debug.Print "InitialProcess skipped."
         Exit Function
     End If
@@ -201,8 +203,8 @@ End Function
 1. GUI/VBE作業: コンテンツの有効化、または信頼済み場所を確認する
 2. GUI/VBE作業: `/cmd SKIP_AUTOEXEC`
 3. フォールバック: Shift-bypass
-4. COMでVBA実行が必要: `AutomationSecurity = 1`
-5. GUI確認だけでマクロ停止したい: `AutomationSecurity = 3`
+4. COM静的操作: 仮想Shift + `AutomationSecurity = 3`
+5. COMでVBA実行が必要: 仮想Shift + `AutomationSecurity = 1`
 
 注意:
 

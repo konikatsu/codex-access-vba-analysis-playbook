@@ -56,24 +56,19 @@ Access作業では、目的達成を急ぐほど共通ルールを飛ばしが�
 - 画面が見えないhidden COMで重いフォームを開き、タイムアウト原因を推測する。
 - ユーザーへの手動依頼で、貼る場所や貼る範囲を曖昧にする。
 
-## 1. 最初は `AutomationSecurity = 3` で安全確認する
+## 1. 最初に目的別の起動経路を選ぶ
 
-Access DBをCOMから安全に開いて、AutoExec系の起動マクロを止めたい場合は、
-`OpenCurrentDatabase` より前に `AutomationSecurity = 3` を設定します。
+`AutomationSecurity = 3`だけで、AutoExec、起動フォーム、信頼済みDBの初期処理をすべて止められるとは限りません。「AutoExecを無効化する」を単一手順にせず、目的別に経路を選びます。
 
-```powershell
-$access = New-Object -ComObject Access.Application
-$access.AutomationSecurity = 3
-$access.Visible = $true
-$access.OpenCurrentDatabase($dbPath)
-```
+| 目的 | 標準経路 |
+| --- | --- |
+| テーブル・クエリなどの構造メタデータだけを読む | DAO `OpenDatabase(copy, False, True)` |
+| COMで`SaveAsText`などの静的操作をする | 仮想Shift + `AutomationSecurity = 3` |
+| COMでコンパイル・VBA実行をする | 仮想Shift + `AutomationSecurity = 1` |
+| GUI/VBEで開発する | DB側が対応済みなら`/cmd SKIP_AUTOEXEC`、未対応ならShift-bypass |
+| フォーム・VBAを含む救出解析 | 空DBへインポート。正式差分基準にはしない |
 
-注意:
-
-- `AutomationSecurity = 3` はCOMで開く場合だけ効きます。
-- ダブルクリックや `Start-Process app.accdb` には効きません。
-- 起動フォームのLoadイベントなど、マクロ以外の起動処理は止まらない場合があります。
-- `Application.Run` でVBAを実行したい作業には向きません。
+詳しい開発順序、確認ゲート、例外時の切替は[Access修正の標準開発手順](15_access-development-workflow.md)を参照してください。
 
 ## 1.5. Accessの信頼設定をDB破損より先に疑う
 
@@ -119,7 +114,7 @@ VBA例:
 
 ```vb
 Public Function StartUp()
-    If InStr(1, Nz(Command(), ""), "SKIP_AUTOEXEC", vbTextCompare) > 0 Then
+    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
         Debug.Print "StartUp skipped."
         Exit Function
     End If
@@ -168,7 +163,7 @@ Accessの信頼済み場所 / コンテンツの有効化:
   セキュリティ警告でVBAやフォームイベントが止まらないようにする。
 
 AutomationSecurity = 3:
-  COMからGUI確認だけを安全に行い、マクロを強制無効化したいときに使う。
+  COMでマクロを強制無効化した静的操作に使う。起動バイパスは別途必要。
   動作テストやApplication.Runの確認には使わない。
 ```
 
@@ -202,25 +197,21 @@ $access.RunCommand(126)
 
 - `AutomationSecurity = 1` はVBA実行を許可するための設定です。
 - `AutomationSecurity = 1` は起動処理をスキップしません。
-- 起動処理を止めたい場合は `/cmd SKIP_AUTOEXEC`、Shift-bypass、または
-  `AutomationSecurity = 3` の安全確認ルートと分けて考えます。
+- COMの起動処理を止めたい場合は仮想Shiftと組み合わせます。`/cmd SKIP_AUTOEXEC`は`MSACCESS.EXE`のコマンドライン経路であり、`OpenCurrentDatabase`へ直接渡せません。
 
 ## 5. 標準フロー
 
-Access解析の最初の流れは、次を標準にします。
+Access解析・修正の流れは、次を標準にします。
 
 ```text
-0. stage0_xxx 作業コピーを作成する
-1. AutomationSecurity = 3 で安全に開き、起動時に何が動くか確認する
-2. GUIでコンテンツの有効化とVBE手動コンパイルを確認する
-3. VBAプロジェクト オブジェクトモデルへのアクセス信頼を確認する
-4. 動作テスト用フォルダをAccessの信頼済み場所に追加する、またはコンテンツ有効化手順を確認する
-5. stage0_xxx に /cmd SKIP_AUTOEXEC 分岐を組み込む
-6. /cmd SKIP_AUTOEXEC で開き、起動処理が止まることを確認する
-7. VBA/フォームイベントの動作テストは、信頼済み場所またはコンテンツ有効化済みの状態で行う
-8. 資産出力ツールを組み込む
-9. AutomationSecurity = 1 で開き、資産出力ツールを実行する
-10. 出力結果を確認し、stage0_success として保存する
+0. ACCDBと対応INIの名前付き作業コピーを作る
+1. 構造メタデータだけならDAO読み取り専用経路で完了する
+2. SHA-256、Access版、参照設定、Export manifestから既存baselineを再利用できるか判定する
+3. baselineが無い場合だけ、仮想Shift + AutomationSecurity = 1でコンパイル・再オープンし、全資産を1回Exportする
+4. Access外で解析、修正案、diff、独立レビューを完了する
+5. baselineから候補を作り、レビュー済み変更だけを反映し、対象資産だけExportする
+6. 候補を再オープンして正式コンパイルし、全資産Exportと差分監査を行う
+7. 必要な場合だけ固定/cmd自己テスト、GUI、帳票、PDF確認を行う
 ```
 
 ## 6. 危険操作前に書くこと

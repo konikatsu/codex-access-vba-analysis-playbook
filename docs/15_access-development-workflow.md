@@ -23,11 +23,12 @@
 | 目的 | AutoExecの扱い | 標準経路 |
 | --- | --- | --- |
 | 手動GUI/VBE開発 | AutoExecから呼ばれる起動関数が早期終了 | `MSACCESS.EXE <work-copy> /cmd SKIP_AUTOEXEC` |
+| 構造メタデータだけの確認 | Accessの起動経路に入らない | DAO `OpenDatabase(copy, False, True)` |
 | COMによる構造確認・Export | AutoExecを保持したまま起動をバイパス | 仮想Shift + `AutomationSecurity=3` |
 | COMによる正式コンパイル | AutoExecを保持したまま起動をバイパス | 仮想Shift + `AutomationSecurity=1` |
 | 読み取り自己テスト | AutoExecを固定ディスパッチャーとして使う | `/cmd RUN_SELFTEST_READONLY` |
 | 更新系自己テスト | AutoExecを固定ディスパッチャーとして使う | `/cmd RUN_SELFTEST_DML` |
-| 直接開けないDBの救出解析 | AutoExecを持たない空DBを開く | 空DBへ対象資産をインポート |
+| フォーム・VBAを含む救出解析 | AutoExecを持たない空DBを開く | 空DBへ対象資産をインポート |
 
 ### 2.1 `/cmd`の意味
 
@@ -47,21 +48,64 @@ MSACCESS.EXE /cmd <fixed-command>
 
 固定コマンドから任意の関数名、SQL、ファイル名を実行できる設計にはしません。
 
-### 2.2 COM起動ゲート
+### 2.2 DAO読み取り専用経路
+
+テーブル、クエリ、リレーションなどの構造メタデータだけが必要なら、Access Applicationを起動する前にDAOを使います。
+
+```powershell
+$engine = $null
+$db = $null
+
+try {
+    $engine = New-Object -ComObject DAO.DBEngine.120
+    $db = $engine.OpenDatabase($copyPath, $false, $true)
+
+    # TableDefs / QueryDefs / Relations / Database.Propertiesを読み取る
+}
+finally {
+    if ($null -ne $db) {
+        try { $db.Close() } catch {}
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($db)
+    }
+    if ($null -ne $engine) {
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($engine)
+    }
+}
+```
+
+第2引数の`False`は共有モード、第3引数の`True`は読み取り専用です。DAOはAccess Applicationの起動処理へ入らないため、AutoExecや起動フォームを実行せず、`MSACCESS.EXE`も起動しません。
+
+2026-09-03にAccess 16.0.20326.20112で行った検証では、起動フォームに副作用を設定した作業用ACCDBをDAOで開いても副作用は0件で、新しい`MSACCESS.EXE`も0件でした。`TableDefs`、`QueryDefs`に加え、`Containers`からフォーム、レポート、モジュールの名前と更新日時を列挙できました。
+
+ただし、アプリケーション固有のContainerはDAOで常にサポートされる保証がありません。取得できても名前などのカタログ情報に限られ、フォーム・レポートの完全な定義やVBAソースは取得できません。DAOの`Database`には`SaveAsText`もありません。完全な資産Exportが必要ならCOM経路を使い、直接開けない場合だけ空DBインポートを救出解析として使います。
+
+読み取り専用はACCDBへの書込みを防ぐ設定であり、リンクテーブルのメタデータ参照が接続先へ到達しない保証ではありません。
+
+DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消えたことも確認します。`DAO.DBEngine.120`の生成が`0x80040154`で失敗する場合は、ACE未導入だけでなく、実行したPowerShellとOffice/ACEの32bit・64bit不一致も切り分けます。
+
+### 2.3 COM起動ゲート
 
 仮想Shiftを使うCOM処理は、次のゲートを一組として実行します。
 
-1. 本体ではなく作業コピーを対象にする。
-2. DAOで`AllowBypassKey`と起動設定を記録する。
-3. Accessを専用の子プロセスで起動する。
-4. `hWndAccessApp`から、その処理が起動したAccess PIDを直ちに記録する。
-5. 仮想Shiftを押し、時間上限を設けて必ず解放する。
+1. 環境変数の総数と、`PATHEXT`、`COMSPEC`、`CommonProgramFiles`、`CommonProgramFiles(x86)`、`TEMP`、`USERPROFILE`、`APPDATA`の実測値を環境フィンガープリントとして記録する。公開ログではユーザー固有部分をマスクする。
+2. 本体ではなく作業コピーを対象にする。
+3. DAOで`AllowBypassKey`と起動設定を記録する。
+4. `CreateObject`経路で専用のAccess COMインスタンスを起動する。GUI試験では、先に代替デスクトップ上で起動したラッパープロセスの中から`CreateObject`する。COMは`DcomLaunch`経由になり得るため、呼出元との親子関係は識別根拠にしない。
+5. `hWndAccessApp`から、その処理が起動したAccess PIDを直ちに記録する。
 6. 用途に合う`AutomationSecurity`を`OpenCurrentDatabase`より前に設定する。
-7. 起動直後に、フォーム、起動ログ、段階ログなどから通常起動処理が走っていないことを確認する。
-8. タイムアウト時は記録したPIDだけを停止する。既存のAccessプロセスを一括停止しない。
-9. 終了後にPID消滅、`.laccdb`消失、仮想Shift解放を確認する。
+7. 外部ウォッチドッグの時間上限を開始し、`OpenCurrentDatabase`の直前に仮想Shiftを押す。
+8. Shiftを押したまま`OpenCurrentDatabase`を呼び、正常復帰直後にShiftを解放する。例外、ハング、タイムアウトでもウォッチドッグが必ず解放する。
+9. 起動直後に、フォーム、起動ログ、段階ログなどから通常起動処理が走っていないことを確認する。
+10. タイムアウト時はShiftを解放してから記録したPIDだけを停止する。既存のAccessプロセスを一括停止しない。
+11. 終了後にPID消滅、`.laccdb`消失、仮想Shift解放を確認する。
+
+親プロセスの環境変数が制限されていると、`PATHEXT`欠落によるexe解決失敗や、`CommonProgramFiles`欠落によるCOM DLL解決失敗が起きます。後者は`0x8007007E`となり、DLLやプロバイダー自体が消えたように見える場合があります。環境フィンガープリントのない観測ログだけで、アプリ、DLL、プロバイダーの障害と結論しません。完全なログオン環境でも再現するかを比較します。
+
+レジストリの`REG_EXPAND_SZ`を確認するときは、値に含まれる環境変数を`[Environment]::ExpandEnvironmentVariables()`で展開し、`%...%`が残っていないことを確認してから`Test-Path`します。`0x8007007E`はモジュールを解決できなかった証拠であり、対象ファイルが存在しない証拠ではありません。
 
 `Application.Forms.Count=0`は確認項目の一つですが、それだけで起動処理が何も実行されなかったとは断定しません。フォームを開かない初期処理もあるため、段階ログや起動処理固有の証跡も確認します。
+
+`hWndAccessApp`からPIDを記録できなかった場合は、起動前の`MSACCESS.EXE`スナップショットと`Win32_Process`を使います。停止候補は「起動前に存在しない」「起動操作の時間窓内に生成」「実行ファイルが期待する`MSACCESS.EXE`」「コマンドラインに独立した引数`-Embedding`がある」をすべて満たすものに限定します。候補が一意でなければ停止しません。`MainWindowHandle=0`、プロセス名だけ、親子関係だけでは識別しません。
 
 `AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけなら空DB方式へ切り替えます。正式コンパイルが必要なら、承認済みの方法で作成したコンパイル専用コピーを使用し、本体や製品候補のAutoExecを変更しません。
 
@@ -252,6 +296,9 @@ MSACCESS.EXE <verification-copy> /cmd RUN_SELFTEST_DML
 ## 9. GUI・帳票・PDF確認
 
 - 無人GUI試験は`acWindowNormal`で開き、代替デスクトップ上で実行する。
+- `Application.Visible=False`だけでは画面分離を保証しない。ユーザーが起動したAccessは`UserControl=True`となり、`Visible=False`へ変更できない。Automation起動でもフォームやダイアログを含む一連の処理を不可視に保てるとは限らない。
+- 確実な画面分離は、Win32のDesktopオブジェクト（`HDESK`）を作り、その上でAccessを起動して行う。これは窓と入力の分離であり、権限、ファイル、ネットワークを隔離するセキュリティサンドボックスではない。
+- 実装順は、`CreateDesktop`で`HDESK`を作成し、`STARTUPINFO.lpDesktop`を指定した`CreateProcess`でPowerShellなどのラッパーをそのデスクトップ上に起動し、ラッパー内から`CreateObject("Access.Application")`を呼ぶ。通常デスクトップでAccessを起動してから移動しようとしない。
 - `acHidden`を無人GUI試験の標準にしない。
 - 試験専用コピーに限り、修飾なし`MsgBox`をログ化する無人モジュールを使用できる。
 - `VBA.Interaction.MsgBox`、Access本体、外部COMのダイアログは別途検出する。
@@ -298,7 +345,9 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 | 状況 | 次の手 |
 | --- | --- |
 | ACCDBハッシュと環境が既存baselineと一致 | baseline作成とbefore Exportを省略 |
+| テーブル・クエリなどの構造情報だけが必要 | DAO読み取り専用経路を使い、Accessを起動しない |
 | COM openがタイムアウト | 同じ呼出しを繰り返さず、PIDと段階ログを確認 |
+| exeやCOM DLLが見つからないように見える | 環境フィンガープリントと展開済みレジストリ値を確認し、完全環境と比較 |
 | `AllowBypassKey=False` | Shiftを強行せず、別の承認済み経路へ切替 |
 | 解析だけ必要で直接開けない | 空DBインポート方式を使用 |
 | 空DB方式で解析できた | 構造理解には使用可、正式差分基準には使用不可 |
@@ -315,3 +364,8 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [LoadFromTextトラブルシュート](05_loadfromtext-troubleshooting.md)
 - [RunCommand(126)でコンパイル](06_compile-with-runcommand.md)
 - [Accessテキスト資産の文字コード](10_access-text-encoding.md)
+- [Workspace.OpenDatabase method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-opendatabase-method-dao)
+- [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
+- [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
+- [Win32_Process class](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process)
+- [Registry value types](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types)

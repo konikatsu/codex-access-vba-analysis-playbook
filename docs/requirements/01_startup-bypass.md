@@ -21,7 +21,7 @@ DB側の起動関数に、次のような分岐を用意します。
 
 ```vb
 Public Function AutoExecMain()
-    If InStr(1, Nz(Command(), ""), "SKIP_AUTOEXEC", vbTextCompare) > 0 Then
+    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
         Debug.Print "AutoExec skipped."
         Exit Function
     End If
@@ -38,19 +38,24 @@ GUI作業では、Shiftキーを押しながらDBを開く方法も使えます�
 
 ただし、AIエージェントによる自動操作ではShift押下状態の制御が難しい場合があります。
 
-## 代替: AutomationSecurity=3
+## COM経路: 仮想Shift + AutomationSecurity
 
-COM経由でDBを開き、マクロを止めたい場合に使います。
+COMの`OpenCurrentDatabase`には`/cmd`を直接渡せません。作業コピーを仮想Shiftで起動バイパスし、目的に応じた`AutomationSecurity`を`OpenCurrentDatabase`より前に設定します。
 
 ```powershell
 $access = New-Object -ComObject Access.Application
 $access.AutomationSecurity = 3
-$access.Visible = $true
+
+# OpenCurrentDatabaseより前に仮想Shiftを押し、PIDを記録する。
 $access.OpenCurrentDatabase($dbPath)
+# OpenCurrentDatabaseの完了または時間上限到達後、必ず仮想Shiftを解放する。
 ```
 
 注意:
 
-- ダブルクリックや `Start-Process app.accdb` には効かない。
-- `Application.Run` には向かない場合がある。
-- 起動フォームのイベントなど、マクロ以外の処理は完全には止まらない可能性がある。
+- `AutomationSecurity = 3`だけでは、起動フォームや信頼済みDBの全初期処理を止める保証になりません。
+- `SaveAsText`などの静的操作は`3`、正式コンパイルや`Application.Run`は`1`を使います。
+- 仮想Shiftを使えない場合、構造メタデータだけならDAO読み取り専用経路へ切り替えます。
+- PID、仮想Shift、タイムアウト、後片付けを一組にします。
+
+詳細は[Access修正の標準開発手順](../15_access-development-workflow.md)を参照してください。

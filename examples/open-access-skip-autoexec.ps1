@@ -4,6 +4,7 @@ param(
 
     [string]$AccessExe = 'msaccess.exe',
 
+    [ValidateSet('SKIP_AUTOEXEC', 'RUN_SELFTEST_READONLY', 'RUN_SELFTEST_DML')]
     [string]$CommandText = 'SKIP_AUTOEXEC'
 )
 
@@ -15,4 +16,5 @@ if (-not (Test-Path -LiteralPath $DatabasePath)) {
 
 $arguments = "`"$DatabasePath`" /cmd $CommandText"
 
+Write-Warning 'This command is effective only when the target database startup dispatcher checks Command() against the same fixed value.'
 Start-Process -FilePath $AccessExe -ArgumentList $arguments

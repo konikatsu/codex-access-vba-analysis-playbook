@@ -80,8 +80,9 @@ $access.OpenCurrentDatabase($dbPath)
 使い分けの目安:
 
 - `AutomationSecurity = 1`: モジュール取り込み、`Application.Run`、コンパイル向け
-- `AutomationSecurity = 3`: GUI確認時にマクロを止めたい場合の候補
-- `/cmd SKIP_AUTOEXEC`: 開発モード起動の標準手段としておすすめ
+- `AutomationSecurity = 3`: COM静的操作でマクロを無効化する設定。起動バイパスは仮想Shiftなどを別途使う
+- DAO `OpenDatabase(copy, False, True)`: 構造メタデータだけをAccess非起動で読む
+- `/cmd SKIP_AUTOEXEC`: DB側が`Command()`の完全一致分岐を実装済みの場合の開発モード起動
 
 ## サンプル
 
@@ -89,7 +90,7 @@ $access.OpenCurrentDatabase($dbPath)
 - [Access VBAをコンパイルする](examples/compile-access-vba.ps1)
 - [Accessテキスト資産の文字コードを確認する](examples/inspect-access-text-encoding.ps1)
 - [Shift-bypassでAccess DBを開く](examples/open-access-devmode.ps1)
-- [AutomationSecurity=3でAccess DBを開く](examples/open-access-no-autoexec.ps1)
+- [AutomationSecurity=3の制約を確認してAccess DBを開く](examples/open-access-no-autoexec.ps1)
 - [/cmd SKIP_AUTOEXEC でAccess DBを開く](examples/open-access-skip-autoexec.ps1)
 - [Docker SQL Serverテスト環境を起動する](examples/start-sqlserver-access-test.ps1)
 

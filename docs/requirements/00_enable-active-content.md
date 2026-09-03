@@ -113,8 +113,7 @@ $access.OpenCurrentDatabase($dbPath)
 $access.RunCommand(126)
 ```
 
-`AutomationSecurity = 3` は、マクロを止めてGUI確認したい場合の候補です。  
-VBA実行、`Application.Run`、コンパイル確認には向かない場合があります。
+`AutomationSecurity = 3`は、COM静的操作でマクロを強制無効化する設定です。起動フォームや信頼済みDBの全初期処理を止める保証はないため、起動バイパスには仮想Shiftなどを別途使います。VBA実行、`Application.Run`、正式コンパイル確認には使いません。
 
 ## VBAプロジェクト オブジェクトモデルへのアクセス信頼
 
