@@ -7,6 +7,7 @@ Microsoft Access / VBA の既存システムを、Codex などのAIエージェ�
 ## まず読む
 
 - [Access作業共通ルール](docs/00_access-work-common-rules.md)
+- [Access修正の標準開発手順](docs/15_access-development-workflow.md)
 - [Access資産をAI(Codex)にエクスポートさせる手順](docs/01_export-analysis-info.md)
 
 ## 要件別に読む
