@@ -64,7 +64,7 @@ Access作業では、目的達成を急ぐほど共通ルールを飛ばしが�
 13. baseline再利用判定: reusable / rebuild-required:
 14. 自動起動: あり / なし、および起動経路:
 15. 無効化方法: not-required / existing-SKIP_AUTOEXEC / add-SKIP_AUTOEXEC / approved-exception:
-16. AllowBypassKey、および通常起動と無効化起動の検証証跡:
+16. AllowBypassKey（一時変更の有無・承認者・承認日時を含む）、および通常起動と無効化起動の検証証跡:
 17. 採用する開発baselineとSHA-256:
 ```
 

@@ -20,8 +20,8 @@ DB内へ解析モジュールを取り込まず、Access外のPowerShellから`S
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File ".\examples\export-access-assets.ps1" `
-  -DatabasePath "C:\work\stage\01_source_copy\app.source-copy.accdb" `
-  -OutputDirectory "C:\work\stage\02_startup_probe" `
+  -DatabasePath "C:\work\project_work\stepNNN_baseline\01_source_copy\app.source-copy.accdb" `
+  -OutputDirectory "C:\work\project_work\stepNNN_baseline\02_startup_probe" `
   -Mode StartupProbe
 ```
 
@@ -37,8 +37,8 @@ Windows PowerShellとOffice/ACEのbitnessを合わせます。
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File ".\examples\export-access-assets.ps1" `
-  -DatabasePath "C:\work\stage\04_baseline\app.baseline.accdb" `
-  -OutputDirectory "C:\work\stage\05_before_export"
+  -DatabasePath "C:\work\project_work\stepNNN_baseline\04_baseline\app.baseline.accdb" `
+  -OutputDirectory "C:\work\project_work\stepNNN_baseline\05_before_export"
 ```
 
 パスワード付きDBでは、平文をコマンド履歴へ残さず`SecureString`として渡します。
@@ -46,8 +46,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 ```powershell
 $password = Read-Host 'Database password' -AsSecureString
 & '.\examples\export-access-assets.ps1' `
-  -DatabasePath 'C:\work\stage\04_baseline\app.baseline.accdb' `
-  -OutputDirectory 'C:\work\stage\05_before_export' `
+  -DatabasePath 'C:\work\project_work\stepNNN_baseline\04_baseline\app.baseline.accdb' `
+  -OutputDirectory 'C:\work\project_work\stepNNN_baseline\05_before_export' `
   -DatabasePassword $password
 ```
 
@@ -70,7 +70,7 @@ $password = Read-Host 'Database password' -AsSecureString
 
 ウォッチドッグは時間上限でShiftを解放し、`hWndAccessApp`から記録したPIDと実行ファイルが一致するAccessだけを停止します。既存の`MSACCESS.EXE`を一括停止しません。
 
-現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。タイムアウトだけでモーダルダイアログが原因と断定せず、必要な案件では外部ラッパーで記録PIDのウィンドウ証跡を取得します。
+現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。現行ツールだけでタイムアウトした場合は`window_enum=not-implemented`相当として扱い、モーダルダイアログが原因と断定しません。ウィンドウ証跡が必要な案件では、外部ラッパーで記録PIDを時間制限付きで列挙します。
 
 Shiftが既に押されている場合、ツールは入力状態を変更せず失敗します。環境変数の有無と値は、ユーザープロファイル等をマスクして`environment.json`へ記録します。`PATHEXT`や`CommonProgramFiles`が欠けた制限環境では、DLL消失と誤診断しないようCOM起動前に失敗させます。
 
