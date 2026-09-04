@@ -137,7 +137,7 @@ DeleteObject
 
 ## AutomationSecurityと起動方法
 
-最初にDAOと`StartupProbe`で`AutoExec`、起動フォーム、呼出先関数を調べます。呼出先関数に完全一致の`SKIP_AUTOEXEC`分岐がなければ作業コピーへ一度だけ追加し、既にあれば重複追加しません。通常起動とスキップ起動を確認した対応版を以後の開発baselineにします。
+対象Access資産へ触る前に、[共通ルール](00_access-work-common-rules.md)の自動起動ヒアリングを完了します。その後、DAOと`StartupProbe`で`AutoExec`、起動フォーム、呼出先関数を調べます。呼出先関数に完全一致の`SKIP_AUTOEXEC`分岐がなければ作業コピーへ一度だけ追加し、既にあれば重複追加しません。通常起動とスキップ起動を確認した対応版を以後の開発baselineにします。
 
 用途別の目安:
 
