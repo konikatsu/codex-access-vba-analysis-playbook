@@ -18,6 +18,8 @@
 $access.LoadFromText(5, 'ToolsModule', 'C:\work\access-project\tools\ToolsModule.mdl')
 ```
 
+`acModule`の`LoadFromText`は標準モジュール向けです。クラスモジュールを同じ経路で取り込まず、既存クラスはアンカー付きVBE編集、新規クラスは`VBComponents.Import`または手動インポートを使います。VBE経路では「VBAプロジェクト オブジェクト モデルへのアクセスを信頼する」設定を先に確認します。
+
 ## `.bas` と `.mdl`
 
 VBEの手動インポートでは `.bas` を使います。  

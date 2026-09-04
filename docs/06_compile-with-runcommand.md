@@ -20,7 +20,7 @@ $access.RunCommand(126)
 1. `AutomationSecurity = 1` で開き、`RunCommand(126)` と変更Public関数の実行を行う。
 2. Accessを終了し、同じDBを再オープンして、同じコンパイルと関数実行を行う。
 
-`AutomationSecurity = 1`はAutoExecや起動フォームを止めません。まず仮想Shiftと組み合わせます。`AllowBypassKey=False`などで起動処理や接続ダイアログを抑止できない場合だけ、製品候補を変更せず、同一候補からAutoExecだけを除いた検証専用コピーを作ります。検証コピーでの変更やVBE正規化を製品候補へ戻しません。
+`AutomationSecurity = 1`はAutoExecや起動フォームを止めません。まず[標準開発手順](15_access-development-workflow.md)に従って自動起動経路を調べ、呼出先の起動関数へ完全一致の`SKIP_AUTOEXEC`分岐を一度だけ追加し、通常起動とスキップ起動を検証した対応版を開発baselineにします。COMの`OpenCurrentDatabase`には`/cmd`を渡せないため、コンパイル時はそのbaselineを仮想Shiftと組み合わせて開きます。`AllowBypassKey=False`などで安全に開けない場合は、AutoExecを削除した別コピーを場当たり的に作らず、承認済みの保守経路を用意するまで中断します。
 
 VBEを開く、コンパイルする、または`SaveAsText`を再実行すると、無関係な既存モジュールの識別子の大文字・小文字が正規化されることがあります。全`SaveAsText`差分は、基準ACCDBも同じ操作・同じ回数で再出力した対照と比較します。対象外の実差分が残る候補は採用しません。
 

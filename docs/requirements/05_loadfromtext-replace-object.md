@@ -27,7 +27,7 @@ DeleteObject
 
 ## SaveAsText退避は必須か
 
-作業コピーを毎回分ける運用なら、差し替え前の `SaveAsText` 退避は必須ではありません。
+使い捨て調査で作業コピー単位の復旧だけを目的とする場合、差し替え前の`SaveAsText`退避は省略できます。正式な[標準開発手順](../15_access-development-workflow.md)では、予定diffとの一致を証明するため変更対象の`SaveAsText`を必須にします。
 
 理由:
 
@@ -41,6 +41,8 @@ DeleteObject
 - フォーム単体で戻したい。
 - 証跡を残したい。
 - 作業コピーを再利用せざるを得ない。
+
+クラスモジュールを`acModule`として`LoadFromText`しません。既存クラスのコードはアンカー付きVBE編集、新規クラスは信頼設定を確認した上で`VBComponents.Import`または手動インポートを使います。
 
 ## LoadFromText失敗時の考え方
 

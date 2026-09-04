@@ -6,6 +6,8 @@ Access DB内の資産をテキスト化し、AIエージェントが検索・解
 
 このページは、人間が手作業でAccessを操作するための手順ではありません。人間はCodexへ対象DBと目的を指示し、Codexが作業コピーの準備、Access操作、`ExportAnalysisInfo` の実行、出力結果の確認を行う前提です。
 
+これは解析専用コピーを使う初見解析経路です。正式なbaselineと候補の差分には[Access外部Exportツール](../16_access-external-export.md)を使います。`ExportAnalysisInfo`を取り込んだDBや`Latest`を正式差分基準へ昇格させません。
+
 AIが見るべき対象:
 
 - 標準モジュール
@@ -121,47 +123,38 @@ End Sub
 
 完全なコードは [`tools/GsTools_analysisinfo.bas`](../../tools/GsTools_analysisinfo.bas) を参照してください。
 
-## 推奨出力先
+## 同梱版の出力先
 
 ```text
 C:\work\sample\
   app.accdb
-  exports\
-    app.accdb\
+  Definesapp.accdb\
+    Exports\
       20260622_113000\
-      Latest\
+    Latest\
 ```
 
 AIには、基本的に `Latest` フォルダを読ませます。
 
-## 出力構成例
+## 同梱版の出力構成
 
 ```text
 Latest\
-  modules\
-    StandardModule1.bas
-    ClassModule1.cls
-  forms\
-    Form_Main.frm
-    Form_Main.code.bas
-  reports\
-    Report_Invoice.rpt
-    Report_Invoice.code.bas
-  queries\
-    Query_Sample.sql
-  tables\
-    TableDefinitions.csv
-  relations\
-    Relations.csv
-  references\
-    References.csv
-  database\
-    Properties.csv
-    StartupSettings.csv
-  manifest.json
+  Objects\
+    Forms\
+    Reports\
+    Macros\
+    Modules\
+    Queries\
+  Schema\
+    Tables.txt
+    Relations.txt
+    References.txt
+    DatabaseProperties.txt
+  ExportAnalysisInfo.log
 ```
 
-`manifest.json` には、出力日時、対象DB名、Accessバージョン、出力件数を入れます。
+同梱版は`manifest.json`、SHA-256一覧、UTF-8派生を生成しません。それらを必須とする正式差分では外部Exportツールを使います。
 
 ## 検索例
 
@@ -172,7 +165,7 @@ rg -n "btnSave_Click|AfterUpdate|BeforeUpdate|Application.Run|LoadFromText|LongP
 フォームイベントを探す例:
 
 ```powershell
-rg -n "Private Sub .*_(Click|AfterUpdate|BeforeUpdate|Load|Open|Current)" "C:\work\exports\app.accdb\Latest\forms"
+rg -n "Private Sub .*_(Click|AfterUpdate|BeforeUpdate|Load|Open|Current)" "C:\work\sample\Definesapp.accdb\Latest\Objects\Forms"
 ```
 
 SQLを探す例:

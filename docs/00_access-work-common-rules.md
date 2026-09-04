@@ -41,14 +41,20 @@ Access作業では、目的達成を急ぐほど共通ルールを飛ばしが�
 9. hidden COMではなく visible UI で確認すべき操作ではないか:
 10. 実行後の成功判定:
 11. 戻し方:
+12. 自動起動: あり / なし:
+13. 起動経路: AutoExec、起動フォーム、イベント、最初の呼出先関数:
+14. 無効化方法: not-required / existing-SKIP_AUTOEXEC / add-SKIP_AUTOEXEC / approved-exception:
+15. 通常起動と無効化起動の検証証跡:
+16. 採用する開発baselineとSHA-256:
 ```
 
-このゲートを書けない場合は、まだ実行しません。
-実行前に足りない前提を確認するか、ユーザーへ相談します。
+依頼元は既知の自動起動情報とbaselineを依頼時に渡し、作業担当は安全な事前調査で不足を補います。このゲートを依頼元へ伝えられない場合は、Access資産への実装、VBE編集、`LoadFromText`、DDL、データ更新、コンパイルをまだ実行しません。`自動起動: 未確認`のまま進めず、判定できない理由と安全な次手を相談します。検証済みbaselineを再利用する場合は保存済み証跡を示し、調査を繰り返しません。
 
 典型的なルール違反:
 
 - 本体DBか作業コピーかを書かずに操作する。
+- 自動起動を未確認のまま、Accessを通常起動または編集する。
+- 無効化方法と検証証跡を依頼元へ伝えず、実装へ進む。
 - 最後に成功したコピーを確認せず、失敗コピーを修復し続ける。
 - 作業コピー運用中なのに、ユーザー確認対象として元DBを案内する。
 - Accessの信頼設定を確認せず、DB破損やCOM不安定と判断する。
@@ -60,10 +66,13 @@ Access作業では、目的達成を急ぐほど共通ルールを飛ばしが�
 
 `AutomationSecurity = 3`だけで、AutoExec、起動フォーム、信頼済みDBの初期処理をすべて止められるとは限りません。「AutoExecを無効化する」を単一手順にせず、目的別に経路を選びます。
 
+ただし開発の最初の作業は、原本コピーをDAOと安全なStartupProbeで調べ、`AutoExec`、起動フォーム、呼出先関数の有無を確定することです。起動関数に完全一致の`SKIP_AUTOEXEC`分岐がなければ作業コピー上で一度だけ追加し、既にあれば重複追加しません。確認済みの自動起動無効化対応版を以後の開発baselineにします。
+
 | 目的 | 標準経路 |
 | --- | --- |
 | テーブル・クエリなどの構造メタデータだけを読む | DAO `OpenDatabase(copy, False, True)` |
-| COMで`SaveAsText`などの静的操作をする | 仮想Shift + `AutomationSecurity = 3` |
+| baseline/候補を全資産Exportする | [Access外部Exportツール](16_access-external-export.md) |
+| COMで個別に`SaveAsText`などの静的操作をする | 仮想Shift + `AutomationSecurity = 3` |
 | COMでコンパイル・VBA実行をする | 仮想Shift + `AutomationSecurity = 1` |
 | GUI/VBEで開発する | DB側が対応済みなら`/cmd SKIP_AUTOEXEC`、未対応ならShift-bypass |
 | フォーム・VBAを含む救出解析 | 空DBへインポート。正式差分基準にはしない |
@@ -100,9 +109,9 @@ VBE/COM操作で不可解なエラーが出た場合、いきなりDB破損やVB
 
 詳しくは [コンテンツの有効化を確認する](requirements/00_enable-active-content.md) を参照してください。
 
-## 2. `/cmd SKIP_AUTOEXEC` を組み込む
+## 2. `/cmd SKIP_AUTOEXEC` を一度だけ組み込む
 
-GUI/VBEで開発モード起動したい場合は、DB側に `/cmd SKIP_AUTOEXEC` を受ける入口を作ります。
+GUI/VBEで開発モード起動したい場合は、DB側に `/cmd SKIP_AUTOEXEC` を受ける入口を作ります。先に既存実装を検索し、同等の完全一致分岐があれば追加しません。分岐を追加したコピーは通常起動と`SKIP_AUTOEXEC`起動を別々に検証し、以後の開発baselineにします。
 
 起動例:
 
@@ -114,7 +123,7 @@ VBA例:
 
 ```vb
 Public Function StartUp()
-    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
+    If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Then
         Debug.Print "StartUp skipped."
         Exit Function
     End If
@@ -130,6 +139,7 @@ End Function
 - `/cmd SKIP_AUTOEXEC` はAccessのセキュリティ警告を解除する仕組みではありません。
 - VBA/マクロ/フォームイベントの動作テストでは、作業フォルダをAccessの信頼済み場所に追加するか、画面の「コンテンツの有効化」を明示的に行います。
 - 起動処理を直接コメントアウトするより、戻し忘れが起きにくいです。
+- この完全一致分岐は毎回追加・削除せず、通常起動へ影響しない保守入口として候補に残します。
 
 推奨する信頼済み場所:
 
@@ -167,21 +177,21 @@ AutomationSecurity = 3:
   動作テストやApplication.Runの確認には使わない。
 ```
 
-## 3. 資産出力ツールを組み込む
+## 3. 正式差分はAccess外部Exportツールを使う
 
-起動処理を止められる状態にしてから、解析用モジュールや資産出力ツールを組み込みます。
+正式なbaselineと実装候補には、DB内へ解析モジュールを取り込まず、[Access外部Exportツール](16_access-external-export.md)を同じバージョン、同じ条件で使います。
 
-推奨:
+- 元ACCDBはハッシュ取得と二次コピー作成にだけ使う。
+- Accessで開くのは二次コピーだけにする。
+- 仮想Shift、`AutomationSecurity=3`、専用PID、外部ウォッチドッグを一組にする。
+- `native`、UTF-8派生、manifest、エラー一覧、メタデータを同時に作る。
+- baselineと候補でコンパイル回数とExport手順を揃える。
 
-- 標準モジュールを `LoadFromText` で取り込む。
-- `LoadFromText` が不安定な場合は、VBEから手動インポートする。
-- 取り込み後にコンパイルする。
-- 出力先は日時付きフォルダと `Latest` を分ける。
+## 4. DB内のExportAnalysisInfoは解析専用コピーに限定する
 
-## 4. 資産出力ツールは `AutomationSecurity = 1` で実行する
+`ExportAnalysisInfo`をDB内へ取り込み、`Application.Run`で実行する旧経路は、初見解析や救出調査には使えます。ただしDBの内容とSHA-256が変わるため、正式差分のbaselineには使いません。
 
-`Application.Run` や `RunCommand(126)` を実行する場合は、
-`OpenCurrentDatabase` より前に `AutomationSecurity = 1` を設定します。
+解析専用コピーでこの経路を使う場合は、`OpenCurrentDatabase`より前に`AutomationSecurity=1`を設定し、仮想Shiftで起動をバイパスします。
 
 ```powershell
 $access = New-Object -ComObject Access.Application
@@ -190,7 +200,6 @@ $access.Visible = $false
 $access.OpenCurrentDatabase($dbPath)
 
 $access.Run("ExportAnalysisInfo")
-$access.RunCommand(126)
 ```
 
 注意:
@@ -198,21 +207,28 @@ $access.RunCommand(126)
 - `AutomationSecurity = 1` はVBA実行を許可するための設定です。
 - `AutomationSecurity = 1` は起動処理をスキップしません。
 - COMの起動処理を止めたい場合は仮想Shiftと組み合わせます。`/cmd SKIP_AUTOEXEC`は`MSACCESS.EXE`のコマンドライン経路であり、`OpenCurrentDatabase`へ直接渡せません。
+- 解析モジュールを取り込んだコピー、その出力、`Latest`は正式差分基準へ昇格させません。
 
 ## 5. 標準フロー
 
 Access解析・修正の流れは、次を標準にします。
 
 ```text
-0. ACCDBと対応INIの名前付き作業コピーを作る
-1. 構造メタデータだけならDAO読み取り専用経路で完了する
-2. SHA-256、Access版、参照設定、Export manifestから既存baselineを再利用できるか判定する
-3. baselineが無い場合だけ、仮想Shift + AutomationSecurity = 1でコンパイル・再オープンし、全資産を1回Exportする
-4. Access外で解析、修正案、diff、独立レビューを完了する
-5. baselineから候補を作り、レビュー済み変更だけを反映し、対象資産だけExportする
-6. 候補を再オープンして正式コンパイルし、全資産Exportと差分監査を行う
-7. 必要な場合だけ固定/cmd自己テスト、GUI、帳票、PDF確認を行う
+0. ACCDBと対応INIの名前付き原本コピーを作り、元ACCDBのSHA-256を記録する
+1. SHA-256、Access版、参照設定、起動経路、Export manifestから既存baselineを再利用できるか判定する
+2. 再利用できない場合だけ、DAOとStartupProbeでAutoExec、起動フォーム、呼出先関数を調べる
+3. 完全一致のSKIP_AUTOEXEC分岐が無ければ起動関数の先頭へ一度だけ追加し、既にあれば追加しない
+4. 通常起動とSKIP_AUTOEXEC起動を別々に確認し、自動起動無効化対応版を開発baseline候補にする
+5. baselineが無い場合だけ、仮想Shift + AutomationSecurity = 1でコンパイル・再オープンする
+6. 閉じたbaselineを外部Exportツールへ渡し、ツールが作る二次コピーから全資産を1回Exportする
+7. Access外で修正案とdiffを作り、セルフレビューする
+8. 独立レビューの指摘を採用・棄却・要検証に分類し、修正後に影響範囲を再検証する
+9. baselineから候補を作り、レビュー済み変更だけを反映し、対象資産だけExportする
+10. 候補を再オープンして正式コンパイルし、閉じた候補を同じ外部ツールで全資産Exportして差分監査する
+11. 必要な場合だけ固定/cmd自己テスト、GUI、帳票、PDF確認を行う
 ```
+
+独立レビューの指摘は正解として無条件採用しません。各指摘の根拠、判断、対応、再検証結果をstage記録へ残し、修正で対象範囲が広がった場合は独立レビューへ戻します。
 
 ## 6. 危険操作前に書くこと
 

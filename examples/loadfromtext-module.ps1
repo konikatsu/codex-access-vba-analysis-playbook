@@ -6,10 +6,18 @@ param(
     [string]$ModuleName,
 
     [Parameter(Mandatory = $true)]
-    [string]$ModuleTextPath
+    [string]$ModuleTextPath,
+
+    [switch]$AcknowledgeStartupMayRun
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $AcknowledgeStartupMayRun) {
+    throw 'This basic sample does not implement virtual Shift. Use the standard development workflow, or rerun with -AcknowledgeStartupMayRun only when startup inspection proved no automatic startup, or normal startup is deliberately permitted in an isolated test environment.'
+}
+
+Write-Warning 'AutomationSecurity=1 enables VBA and does not bypass AutoExec or startup forms.'
 $access = $null
 
 try {

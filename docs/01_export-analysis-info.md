@@ -1,8 +1,10 @@
-# Access資産のエクスポートをAI(Codex)に依頼するナレッジ
+# DB内ExportAnalysisInfoによる初見解析
 
 Access / VBA の既存システムを Codex などのAIに解析させるには、まずAccess DB内の資産をテキストとして取り出す必要があります。
 
 この文書は、人間がAccessやVBEを手作業で操作するための手順ではありません。依頼者がCodexへ指示し、Codexが解析用ツールの作成・調整、対象DBへの組み込み、Access上での実行、出力結果の確認まで行った流れを、次回以降に再利用するためのナレッジです。
+
+この経路は、解析専用コピーへ`ExportAnalysisInfo`モジュールを取り込んで`Latest`を作る初見解析向けです。モジュール取り込みでDBのSHA-256と資産構成が変わるため、正式なbaselineや最終差分には使いません。正式比較には、DBを変更しない[Access外部Exportツール](16_access-external-export.md)を使います。
 
 特定の顧客名、DB名、サーバ名、実データは含めません。
 
@@ -128,10 +130,12 @@ Accessの `SaveAsText` 出力は、オブジェクト種別によって文字コ
 対象DBは C:\work\sample\app.accdb です。
 本体ではなく作業コピーを使ってください。
 Access資産をAI解析用にエクスポートしてください。
-出力後は Latest フォルダを確認し、まず manifest またはログ、次に Objects と Schema を確認してください。
+出力後は Latest フォルダを確認し、まず ExportAnalysisInfo.log、次に Objects と Schema を確認してください。
 フォームのイベント処理を調べる場合は、フォーム定義とコードビハインドの両方を確認してください。
 修正提案をする前に、現象と原因を分けて報告してください。
 ```
+
+同梱版`ExportAnalysisInfo`はmanifestを生成しません。manifest、元DBのSHA-256照合、UTF-8派生が必要な正式差分では外部Exportツールへ切り替えます。
 
 ## 公開時の注意
 

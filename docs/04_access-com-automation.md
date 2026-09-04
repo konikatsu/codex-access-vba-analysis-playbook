@@ -2,7 +2,7 @@
 
 PowerShellから `Access.Application` を使ってAccess DBを操作する場合の基本形です。
 
-この文書のコードはCOMの基本形です。起動バイパス、DAO経路、PID限定回収を含む実作業の標準は[Access修正の標準開発手順](15_access-development-workflow.md)を優先してください。`AutomationSecurity`の値だけでAutoExecや起動フォームを止められるとは判断しません。
+この文書のコードはCOMの基本形です。起動バイパス、DAO経路、PID限定回収を含む実作業の標準は[Access修正の標準開発手順](15_access-development-workflow.md)を優先してください。最小形をそのまま実行すると起動処理が走り得ます。`AutomationSecurity`の値だけでAutoExecや起動フォームを止められるとは判断しません。
 
 ## 最小形
 
@@ -103,25 +103,27 @@ Access COMで詰まったときに、次の順番で判断すると遠回りに�
 
 ## 起動処理の扱い
 
-自動起動を止めるために、DB側の `AutoExec`、`StartUp`、起動用関数を直接書き換える方法は、戻し忘れのリスクがあります。
+最初に本体のコピーをDAOと`StartupProbe`で調べ、`AutoExec`、起動フォーム、呼出先関数を特定します。通常起動してから探し始めません。
 
-COM自動化では、まず次の方針を優先します。
+呼出先関数に`SKIP_AUTOEXEC`の完全一致分岐がなければ、作業コピー上で関数の先頭へ一度だけ追加します。既に同等実装があれば追加しません。通常起動とスキップ起動を確認した対応版を開発baselineにし、以後の候補はそこから作ります。
 
-- DB本体の起動処理は原則触らない。
+COM自動化では、次の方針を併用します。
+
+- DB本体とAutoExecマクロ自体は変更しない。変更対象は作業コピー上の呼出先関数に限定する。
 - 作業前に環境フィンガープリントと起動前`MSACCESS.EXE`スナップショットを記録する。
 - 仮想Shiftで起動をバイパスし、`OpenCurrentDatabase`の前に用途に合う`AutomationSecurity`を設定する。
 - PIDは`hWndAccessApp`から直ちに取得し、終了時は記録したPIDだけを対象にする。
 - 構造メタデータだけならAccessを起動せず、DAO読み取り専用経路を使う。
 
-GUI/VBE作業では、DB内の起動処理を書き換える代わりに、Shiftキーを押下した状態でDBを開く補助スクリプトを使う方法があります。
+まだ分岐を追加していない最初の作業コピーやCOM経路では、Shiftキーを押下した状態でDBを開く補助スクリプトを使います。
 
 例:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ".\examples\open-access-devmode.ps1" -DatabasePath "C:\work\access-project\Sample.accdb"
+powershell -ExecutionPolicy Bypass -File ".\examples\open-access-devmode.ps1" -DatabasePath "C:\work\access-project\Sample.accdb" -AcknowledgeCurrentDesktopInput
 ```
 
-この方法なら、DB内の `AutoExec` や起動用関数を変更せずに、開発者モード相当で起動できます。
+最初の調査はDAOと`StartupProbe`で行い、この方法は調査後のIF分追加にだけ使います。自動起動無効化対応版ができた後のGUI/VBE作業は、毎回Shiftに頼らず`/cmd SKIP_AUTOEXEC`を使います。
 
 マクロを無効化した静的操作では、Access COMで`AutomationSecurity = 3`を設定してから`OpenCurrentDatabase`します。ただし、次の例は`AutomationSecurity`の制約確認用であり、完全な起動バイパスではありません。
 
@@ -133,7 +135,7 @@ powershell -Sta -ExecutionPolicy Bypass -File ".\examples\open-access-no-autoexe
 
 実作業では仮想Shift、PID記録、タイムアウト、後片付けを組み合わせます。起動フォームのLoadイベントやスタートアップ設定は、`AutomationSecurity = 3`だけでは止まらないことがあります。
 
-## /cmd で解析用の起動モードを作る
+## /cmd で保守用の起動モードを作る
 
 長期的には、Access DB側に「解析や保守では初期処理をスキップできる公式の入口」を用意するのが扱いやすいです。
 
@@ -166,10 +168,10 @@ End Function
 Private Function IsSkipAutoExecMode() As Boolean
     Dim cmd As String
 
-    cmd = Nz(Command(), "")
+    cmd = Nz(Command(), vbNullString)
 
     IsSkipAutoExecMode = _
-        (StrComp(Trim$(cmd), "SKIP_AUTOEXEC", vbTextCompare) = 0)
+        (StrComp(cmd, "SKIP_AUTOEXEC", vbBinaryCompare) = 0)
 End Function
 ```
 
@@ -179,12 +181,12 @@ End Function
 Start-Process msaccess.exe "`"C:\work\access-project\Sample.accdb`" /cmd SKIP_AUTOEXEC"
 ```
 
-既存のAutoExecがすでに初期処理関数を直接呼んでいる場合は、最小修正として初期処理関数の先頭に判定を入れる方法もあります。
+既存のAutoExecがすでに初期処理関数を直接呼んでいる場合は、標準の最小修正として初期処理関数の先頭に判定を入れます。
 
 ```vb
 Public Function InitialProcess()
 
-    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
+    If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Then
         Debug.Print "InitialProcess skipped."
         Exit Function
     End If
@@ -194,9 +196,9 @@ Public Function InitialProcess()
 End Function
 ```
 
-ただし、将来的には `AutoExecMain` を挟む方が、通常起動、保守起動、テスト起動を管理しやすくなります。
+将来的に`AutoExecMain`を挟む設計へ整理する場合は、別の機能変更としてレビューします。最初の無効化対応で必要以上のリファクタリングを混ぜません。
 
-この方式をDB側に実装できている場合、GUI/VBE作業では `/cmd SKIP_AUTOEXEC` を第一候補にします。
+追加前に同じ完全一致判定を検索し、既にあれば重複追加しません。この方式をDB側に実装・検証できた後、GUI/VBE作業では `/cmd SKIP_AUTOEXEC` を第一候補にします。
 
 推奨優先順位:
 

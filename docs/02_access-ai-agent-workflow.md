@@ -110,7 +110,7 @@ DeleteObject
 - 失敗したコピーは破棄する。
 - 成功したコピーを次の土台にする。
 
-差し替え前の `SaveAsText` は必須ではありません。DBコピー単位で戻れるなら省略できます。
+使い捨て調査でDBコピー単位の復旧だけを目的とする場合、差し替え前の`SaveAsText`は省略できます。正式な[標準開発手順](15_access-development-workflow.md)では、予定diffとの一致を証明するため変更対象の`SaveAsText`を必須にします。
 
 ただし、次の場合は `SaveAsText` 退避が有効です。
 
@@ -137,6 +137,8 @@ DeleteObject
 
 ## AutomationSecurityと起動方法
 
+最初にDAOと`StartupProbe`で`AutoExec`、起動フォーム、呼出先関数を調べます。呼出先関数に完全一致の`SKIP_AUTOEXEC`分岐がなければ作業コピーへ一度だけ追加し、既にあれば重複追加しません。通常起動とスキップ起動を確認した対応版を以後の開発baselineにします。
+
 用途別の目安:
 
 | 用途 | 推奨 |
@@ -158,9 +160,11 @@ Start-Process msaccess.exe "`"C:\path\to\app.accdb`" /cmd SKIP_AUTOEXEC"
 
 DB側には、AutoExecから呼ばれる入口関数に次のような分岐を用意しておくと扱いやすくなります。
 
+追加前に既存の`Command()`判定を確認し、同等の完全一致分岐がある場合は追加しません。
+
 ```vb
 Public Function AutoExecMain()
-    If StrComp(Trim$(Nz(Command(), "")), "SKIP_AUTOEXEC", vbTextCompare) = 0 Then
+    If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Then
         Debug.Print "AutoExec skipped."
         Exit Function
     End If
