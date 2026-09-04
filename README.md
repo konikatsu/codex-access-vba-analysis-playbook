@@ -8,6 +8,7 @@ Microsoft Access / VBA の既存システムを、Codex などのAIエージェ�
 
 - [Access作業共通ルール](docs/00_access-work-common-rules.md)
 - [Access修正の標準開発手順](docs/15_access-development-workflow.md)
+- [Access修正の標準開発手順 詳細リファレンス](docs/17_access-development-workflow-reference.md)
 - [Access外部Exportツール](docs/16_access-external-export.md)
 - [DB内ExportAnalysisInfoによる初見解析](docs/01_export-analysis-info.md)
 
