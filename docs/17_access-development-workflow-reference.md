@@ -58,7 +58,7 @@ Access DBには、AutoExec、起動フォーム、起動イベントから直ち
 
 1. DAOで`StartupForm`、`AllowBypassKey`、マクロとフォームのカタログを読む。
 2. `AutoExec`マクロ、全マクロ、起動フォーム、AutoExecから開かれるフォーム、それらの`Open`/`Load`イベント、保存クエリ、テーブルデータマクロ、そこから呼ばれる関数を列挙する。
-3. 定義が必要なら、外部Exportツールを`-Mode StartupProbe`で実行する。ツールが仮想Shiftで開くのは二次コピーだけである。
+3. 定義が必要で`AllowBypassKey`が明示的な`False`でなければ、外部Exportツールを`-Mode StartupProbe`で実行する。ツールが仮想Shiftで開くのは二次コピーだけである。`False`ならツールを繰り返さず、[空DB救出解析](requirements/07_empty-database-recovery-import.md)へ切り替える。
 4. `AutoExec`の`RunCode`等が呼ぶ最初の起動関数を特定する。
 5. その関数の先頭に、完全一致の`SKIP_AUTOEXEC`分岐が既にあるか確認する。
 
@@ -144,13 +144,20 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 ### 2.3.1 通常起動前の外部接続棚卸し
 
-自動起動を確実に抑止できないコピーの通常起動を検討する前に、起動経路から到達し得る外部接続元を静的に棚卸しします。
+作業コピーを通常起動する前、または自己テスト・GUIで業務コードを実行する前に、無効化方法の有無にかかわらず、対象操作から到達し得る外部接続元を静的に棚卸しします。`/cmd SKIP_AUTOEXEC`は起動時の分岐を示すだけで、自己テストやその後の画面操作が使う接続先まで証明しません。
 
-1. DAOでリンクテーブルの`TableDef.Connect`とパススルークエリの`QueryDef.Connect`を読み、接続情報の由来を記録する。`Fields`、`Indexes`、`RefreshLink`、クエリ実行、レコード参照は行わない。
-2. StartupProbeまたは空DB救出解析で、起動経路上のマクロとVBAから、INI読込み、DSN、`ConnectionString`、`OpenDatabase`、`CurrentProject.Connection`などの接続生成箇所を追う。コードは実行しない。
-3. 起動経路から到達する接続ごとに、設定元、マスクした接続先識別子、検証用接続先、到達性の証跡をstageへ残す。資格情報や実サーバー名は残さない。
+1. DAOでリンクテーブルの`TableDef.Connect`と`SourceTableName`、パススルークエリの`QueryDef.Connect`と全保存クエリの`QueryDef.SQL`を読む。`Fields`、`Indexes`、`RefreshLink`、クエリ実行、レコード参照は行わない。
+2. `StartupProbe`または空DB救出解析のSaveAsTextから、マクロ、保存クエリ、フォーム・レポートの`RecordSource`、コントロールの`RowSource`、VBAの動的SQLを追う。INI読込み、DSN、`ConnectionString`、`OpenDatabase`、`CurrentProject.Connection`、`ADODB.Connection.Open`に加え、SQLの`IN`句、`[ODBC;`、`DATABASE=`、`DSN=`、`DBQ=`も接続元候補にする。コードは実行しない。
+3. `AllowBypassKey=False`では現行ツールの`StartupProbe`を使えないため、DAOと空DB救出解析を使う。接続先キーを含むDBで`StartupProbe`が`secret-scan`によりFAILになった場合は安全側の停止として扱い、隔離stageの出力をローカルだけで確認する。PASSやbaselineにせず、外部へ送らない。
+4. 対象操作から到達する接続ごとに、設定元、マスクした接続先識別子、検証用接続先、到達性の証跡をstageへ残す。資格情報や実サーバー名は残さない。
 
-INI差替えだけで安全と判断できるのは、起動経路上の全接続がそのINIから生成されると確認できた場合だけです。`TableDef.Connect`、`QueryDef.Connect`、DSN、ハードコードなど別経路がある場合は、明示承認した使い捨て保守コピーだけを検証用接続先へ変更し、変更後の値を再読してから通常起動します。接続元または接続先を確定できない場合は通常起動しません。停止中または不明な本番依存先を、この作業のために起動しません。
+原本ACCDB、対応INI、起動経路、対象操作が前回記録と一致し、保存済み棚卸しのSHA-256も一致する場合は棚卸しを再利用できます。再利用時も、資格情報を含まない接続先allowlistのSHA-256と検証用接続先の到達性は実行前に再確認します。いずれかが変わった場合は棚卸しをやり直します。
+
+INI差替えだけで安全と判断できるのは、対象操作から到達する全接続がそのINIから生成されると確認できた場合だけです。既存のUser DSN、System DSN、File DSNは、ほかのアプリや利用者へ影響し得るため書き換えません。必要なら明示承認した使い捨て保守コピーだけで、専用の検証用DSNまたは対応ドライバーが許すDSN-less接続へ置き換えます。
+
+リンクテーブルの`TableDef.Connect`を変更する場合は、接続文字列から資格情報を除いて解析した接続先識別子が独立したallowlistと完全一致することを確認し、専用プロセスと時間制限の下で`RefreshLink`を呼びます。`RefreshLink`は外部通信を伴い得るため、意図しない接続先への通信を遮断または監視できない環境では実行しません。処理後はDAOを閉じ、再オープンして永続化された`Connect`を再読します。`QueryDef.Connect`、保存SQL、VBAなどを変更した場合も、閉じて再オープンしたコピーから値を再取得します。変更、再接続、再読のいずれかが失敗したコピーは`failed`とし、通常起動しません。現行の共通ツールは、この書換えと`RefreshLink`を実装していません。
+
+接続元または接続先を確定できない場合は、通常起動、自己テスト、GUIを行いません。停止中または不明な本番依存先を、この作業のために起動しません。
 
 ### 2.4 COM起動ゲート
 
@@ -165,7 +172,7 @@ INI差替えだけで安全と判断できるのは、起動経路上の全接�
 7. 外部ウォッチドッグの時間上限を開始し、`OpenCurrentDatabase`の直前に仮想Shiftを押す。
 8. Shiftを押したまま`OpenCurrentDatabase`を呼び、正常復帰直後にShiftを解放する。例外、ハング、タイムアウトでもウォッチドッグが必ず解放する。
 9. 起動直後に、フォーム、起動ログ、段階ログなどから通常起動処理が走っていないことを確認する。
-10. タイムアウト時はウォッチドッグでShiftを解放する。列挙機能がある実行系では、停止前に記録PIDに属するトップレベルウィンドウを時間制限付きで1回だけ列挙し、クラス名、キャプション、可視・有効状態、所有関係をstage記録へ残す。列挙機能がなければ`window_enum=not-implemented`、失敗したら`window_enum=failed`と記録する。その後、記録したPIDだけを停止し、既存のAccessプロセスを一括停止しない。
+10. タイムアウト時はウォッチドッグでShiftを解放する。列挙機能がある実行系では、停止前に記録PIDに属するトップレベルウィンドウを時間制限付きで1回だけ列挙し、クラス名、キャプション、可視・有効状態、所有関係をstage記録へ残す。列挙機能がなければ`window_enum=not-implemented`、失敗したら`window_enum=failed`とstage記録へ手作業で残す。現行ツールのsummaryには出ない。その後、記録したPIDだけを停止し、既存のAccessプロセスを一括停止しない。
 11. 終了後にPID消滅、`.laccdb`消失、仮想Shift解放を確認する。
 
 環境フィンガープリントは、同一ホストの直近成功記録または新しい対話型PowerShellの値と比較します。必須変数の欠落や想定外の差があればCOM診断を中断し、既知の正常な実行環境を復元してから再確認します。
@@ -186,11 +193,11 @@ INI差替えだけで安全と判断できるのは、起動経路上の全接�
 
 タイムアウトや強制停止を経験した作業コピーは`failed`扱いにし、以後の候補へ昇格させません。`.laccdb`または`.ldb`は対象PIDの消滅を確認した後だけ片付けます。停止候補を一意に識別できない場合は停止せず、前提が回復するまでそのstageを中断します。
 
-`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAO、次節のdisabled mode、または空DB方式へ切り替えます。修正が必要なら、まず前節の棚卸しで起動時接続元を確定します。承認済みの使い捨て検証サービスと、必要なINI、`TableDef.Connect`、`QueryDef.Connect`、DSN等がすべて同じ検証環境を指すことを再読して証明できた場合だけ、通常起動経路を候補にします。
+`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAO、次節のdisabled mode、または空DB方式へ切り替えます。修正が必要なら、まず[前節の棚卸し](#231-通常起動前の外部接続棚卸し)で起動時接続元を確定します。承認済みの使い捨て検証サービスと、必要なINI、`TableDef.Connect`、`QueryDef.Connect`、DSN等がすべて同じ検証環境を指すことを再読して証明できた場合だけ、通常起動経路を候補にします。
 
-依存先を用意できず、起動関数へ保守分岐を追加する必要がある場合に限り、明示承認を得た使い捨てコピーをDAOで排他・読み書きオープンし、`AllowBypassKey=True`へ一時変更する救出経路を候補にできます。変更前の値、承認者、承認日時、作業前SHA-256、操作ログを記録し、次回オープンから有効になることを前提にShift-bypassで一度だけ開きます。原本では行わず、排他オープンまたはプロパティ変更を確認できない場合は中断します。
+依存先を用意できず、起動関数へ保守分岐を追加する必要がある場合に限り、明示承認を得た使い捨てコピーをDAOで排他・読み書きオープンし、`AllowBypassKey=True`へ一時変更する救出経路を候補にできます。変更前の値、承認者、承認日時、作業前SHA-256、操作ログを記録し、次回オープンから有効になることを前提に、保守分岐を追加するためShift-bypassで開きます。原本では行わず、排他オープンまたはプロパティ変更を確認できない場合は中断します。
 
-一時的な`True`の間に、保守分岐の追加、再オープン正式コンパイル、全資産Exportまでの証跡を取得します。監査後に`AllowBypassKey`を元の`False`へ戻し、DAOで復元値を確認します。このプロパティ差分はstageに明記しますが、復元前のExportを復元後の最終候補そのものの証明にはしません。
+一時的な`True`の間に、保守分岐の追加、再オープン正式コンパイル、全資産Exportまでの証跡を取得します。監査後に`AllowBypassKey`を元の`False`へ戻し、DAOを閉じて再オープンした後の復元値を確認します。復元値が`False`でなければ、その候補は`failed`とし、最終候補にしません。このプロパティ差分はstageに明記しますが、復元前のExportを復元後の最終候補そのものの証明にはしません。
 
 この救出経路は対象のAccess/ACE・ファイル形式で実機確認が必要です。現行の外部Exportツールは一時変更も、`AllowBypassKey=False`へ戻した最終候補のExportも実装していません。最終候補の起動抑止、正式コンパイル、全資産diffを承認済み経路で証明できるまでは、開発baselineへ昇格せず`要実機確認`とします。
 
@@ -243,6 +250,8 @@ access_version
 exporter_sha256
 manifest_sha256
 startup_probe_sha256
+startup_connection_inventory_sha256
+test_target_allowlist_sha256
 startup_bypass_status
 startup_bypass_diff_sha256
 created_at
@@ -258,9 +267,9 @@ session_sequence
 
 1. 最新成功ACCDBを選ぶ。
 2. 新しいstageへACCDBと対応INIをコピーする。
-3. コピー元ACCDBの操作前SHA-256を記録する。
+3. 原本の作業前SHA-256を記録し、作業前ゲートの項目12と一致することを確認する。
 4. コピー直後に、コピー元と作業コピーのSHA-256が一致することを確認する。
-5. 通常起動、自己テスト、GUI試験を許す場合は、起動経路上の全接続先が承認済みの使い捨て検証環境と一致し、同じプロトコル・ドライバーによる時間制限付きの読み取り確認で到達できることを確かめる。静的作業でも、自動起動抑止を肯定対照で確認できていない間は、停止中の依存先があることを安全の根拠にしない。対象コピーが信頼済み場所にある場合は、依存先の到達性を確認するか、目的に合う非信頼stageへ移してから開く。
+5. 通常起動、自己テスト、GUI試験を許す場合は、[通常起動前の外部接続棚卸し](#231-通常起動前の外部接続棚卸し)を行い、対象操作から到達する全接続先が承認済みの使い捨て検証環境と一致し、同じプロトコル・ドライバーによる時間制限付きの読み取り確認で到達できることを確かめる。静的作業でも、自動起動抑止を肯定対照で確認できていない間は、停止中の依存先があることを安全の根拠にしない。対象コピーが信頼済み場所にある場合は、依存先の到達性を確認するか、目的に合う非信頼stageへ移してから開く。
 6. 無関係な`MSACCESS.EXE`と残留`.laccdb`がないことを確認する。
 
 例:
@@ -280,6 +289,8 @@ project_work/                    # この親フォルダは信頼済みにしな
     05_before_export/
     06_test_results/
   stage_gui_trusted/             # このフォルダだけGUI/VBE・自己テスト用に信頼
+    app.verification.accdb
+    app.ini
 ```
 
 この図は処理後の構成です。先に作るのは`project_work`、`stepNNN_baseline`、`01_source_copy`までとし、外部Exportツールへ渡す`02_startup_probe`と`05_before_export`は作成しません。ツールは存在しない新規出力先だけを受け付け、自身でディレクトリを作ります。
@@ -291,7 +302,7 @@ project_work/                    # この親フォルダは信頼済みにしな
 3. 起動関数に同等の完全一致分岐があれば`already-supported`と記録し、追加しない。
 4. 分岐がなければ初回だけShift-bypassで作業コピーを開き、起動関数の先頭へ最小のIF分を追加する。
 5. 変更対象のbefore、after、diff、SHA-256を保存し、起動無効化以外の差分がないことをセルフレビューする。
-6. 通常起動と`/cmd SKIP_AUTOEXEC`を検証環境で別々に確認する。
+6. [外部接続棚卸し](#231-通常起動前の外部接続棚卸し)に合格した後、通常起動と`/cmd SKIP_AUTOEXEC`を検証環境で別々に確認する。
 
 この起動無効化対応は以後の保守を安全にする恒久的な開発入口です。通常起動の処理を変えない完全一致分岐として製品候補にも残します。毎回追加・削除したり、作業終了時に戻したりしません。
 
@@ -469,11 +480,12 @@ baselineと候補はいずれも「実装/基準作成セッションでコン�
 
 ## 8. 自己テスト
 
-静的監査に合格した候補を`stage_gui_trusted`へ複製し、その検証コピーで必要なテストだけを実行します。監査済み候補そのものは移動せず、信頼済みstageへ原本、静的Export、救出解析のコピーを置きません。
+静的監査に合格した候補と対応INIを一組で`stage_gui_trusted`へ複製し、両方のSHA-256を記録します。[外部接続棚卸し](#231-通常起動前の外部接続棚卸し)と[4.1の接続先確認](#41-作業コピー)を複製後のファイルで再実施してから、その検証コピーで必要なテストだけを実行します。監査済み候補そのものは移動せず、信頼済みstageへ原本、静的Export、救出解析のコピーを置きません。
 
 自己テストの前提:
 
 - 検証コピーのフォルダが信頼済み場所であるか、コンテンツが明示的に有効化されている。
+- 読み取り系・更新系とも、最初の外部接続を開く前に、アプリ自身が接続設定から導出した接続先をアプリケーションINIとは独立したallowlistと完全一致で照合する。
 - 物理Shiftと仮想Shiftが解放されている。
 - AutoExecから呼ぶ起動関数が固定`Command()`を完全一致で判定する。
 - テスト処理は終了時に結果JSONを書き、Access自身を閉じる。
@@ -488,6 +500,7 @@ $runId = [guid]::NewGuid().ToString('N')
   -CommandText RUN_SELFTEST_READONLY `
   -RunId $runId `
   -ResultPath "C:\work\project_work\stepNNN_baseline\06_test_results\$runId.json" `
+  -AllowlistPath 'C:\work\project_work\stepNNN_baseline\selftest-allowlist.json' `
   -AcknowledgeTrustedLocation
 ```
 
@@ -504,9 +517,9 @@ $runId = [guid]::NewGuid().ToString('N')
   -AcknowledgeTrustedLocation
 ```
 
-`RUN_SELFTEST_DML`は、書込み前にAccess自身の接続でサーバ名とDB名を取得し、許可された使い捨て検証DBとの完全一致を要求します。許可リストはアプリケーションINIから独立した、stage専用の読み取り専用設定またはテストコード内の固定値にします。INIが指す先をそのまま許可値として採用しません。本番、共有DB、接続先不明では、最初の書込みより前に拒否します。
+`RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`は、最初の外部接続を開く前に、接続設定から導出した接続先を許可された使い捨て検証DBと完全一致で照合します。許可リストはアプリケーションINIから独立した、stage専用の読み取り専用設定またはテストコード内の固定値にし、資格情報を含めません。INIが指す先をそのまま許可値として採用しません。本番、共有DB、接続先不明では、接続を開く前に拒否します。
 
-結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数を入れます。更新系では`target_allowlist_match=true`も必須です。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
+結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match=true`を入れます。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、接続先の一致を証明できない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
 
 試験データには一意なマーカーを付け、終了後に別の読み取り確認で0件になったことを検証します。マーカー0件だけではテスト自体が走った証拠になりません。直接SQL接続の成功だけで、Accessが正しいINIを読んだとも判断しません。
 
@@ -540,6 +553,7 @@ $runId = [guid]::NewGuid().ToString('N')
 - baselineと候補のmanifest
 - 自己テスト、GUI、帳票、PDFの証跡
 - 既知の未検証項目
+- `AllowBypassKey`を一時変更した場合の元値、承認者、承認日時、復元確認
 
 判定は`PASS`、`FAIL`、`静的レビュー合格（実機未確認）`、`要実機確認`、`未検証`のいずれかで明示します。
 
@@ -578,7 +592,7 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 | `RPC_E_DISCONNECTED` / `0x800706BE` | Access障害と断定せず、モーダル、段階ログ、INI接続先の同一性・到達性を確認 |
 | exeやCOM DLLが見つからないように見える | 環境フィンガープリントと展開済みレジストリ値を確認し、完全環境と比較 |
 | `AllowBypassKey=False` | Shiftを強行しない。解析はDAO、検証済みdisabled mode、または空DB方式、修正は依頼元確認後の承認済み経路へ切替 |
-| `AllowBypassKey=False`かつ起動依存先が停止 | 起動経路上のINI、`TableDef.Connect`、`QueryDef.Connect`、DSN、コード生成接続を棚卸しし、すべて検証環境を指すと証明できた場合だけ通常起動を検討する。確定できなければ明示承認した使い捨てコピーで`AllowBypassKey`の一時変更を検討し、最終候補の検証経路がなければ`要実機確認`で中断する |
+| `AllowBypassKey=False`かつ起動依存先が停止 | [起動経路上の外部接続を棚卸し](#231-通常起動前の外部接続棚卸し)し、すべて検証環境を指すと証明できた場合だけ通常起動を検討する。確定できなければ明示承認した使い捨てコピーで`AllowBypassKey`の一時変更を検討し、最終候補の検証経路がなければ`要実機確認`で中断する |
 | 固定`/cmd`未対応DBをGUI/VBEで開く | Shift-bypassを使う。`AllowBypassKey=False`なら空DB方式または承認済みコピーへ切替 |
 | 解析だけ必要で直接開けない | [空DBインポート方式](requirements/07_empty-database-recovery-import.md)を使用し、作業コピーからAutoExecを除外して選択インポート |
 | 空DB方式で解析できた | 構造理解には使用可、正式差分基準には使用不可 |
@@ -601,7 +615,10 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [空DBインポートによる救出解析](requirements/07_empty-database-recovery-import.md)
 - [Workspace.OpenDatabase method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-opendatabase-method-dao)
 - [TableDef object (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/tabledef-object-dao)
+- [TableDef.RefreshLink method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/tabledef-refreshlink-method-dao)
 - [QueryDef.Connect property (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/querydef-connect-property-dao)
+- [IN clause (Microsoft Access SQL)](https://learn.microsoft.com/en-us/office/vba/access/concepts/miscellaneous/in-clause-microsoft-access-sql)
+- [Managing Data Sources (ODBC)](https://learn.microsoft.com/en-us/sql/odbc/admin/managing-data-sources?view=sql-server-ver17)
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
 - [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)

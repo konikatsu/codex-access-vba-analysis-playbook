@@ -70,7 +70,7 @@ $password = Read-Host 'Database password' -AsSecureString
 
 ウォッチドッグは時間上限でShiftを解放し、`hWndAccessApp`から記録したPIDと実行ファイルが一致するAccessだけを停止します。既存の`MSACCESS.EXE`を一括停止しません。
 
-現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。現行ツールだけでタイムアウトした場合は`window_enum=not-implemented`相当として扱い、モーダルダイアログが原因と断定しません。ウィンドウ証跡が必要な案件では、外部ラッパーで記録PIDを時間制限付きで列挙します。
+現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。現行ツールだけでタイムアウトした場合は`window_enum=not-implemented`相当としてstage記録へ手作業で残します。この値は現行ツールのsummaryには出ません。モーダルダイアログが原因と断定せず、ウィンドウ証跡が必要な案件では、外部ラッパーで記録PIDを時間制限付きで列挙します。
 
 Shiftが既に押されている場合、ツールは入力状態を変更せず失敗します。環境変数の有無と値は、ユーザープロファイル等をマスクして`environment.json`へ記録します。`PATHEXT`や`CommonProgramFiles`が欠けた制限環境では、DLL消失と誤診断しないようCOM起動前に失敗させます。
 
@@ -117,7 +117,7 @@ Shiftが既に押されている場合、ツールは入力状態を変更せず
 
 `environment.json`は実行環境の診断証跡です。ユーザープロファイル配下は`<user-profile>`へ置換されますが、公開前には顧客固有のパスや値が残っていないことを別途確認します。
 
-ツールは`review_utf8`を走査し、接続資格情報・接続先に使われるキーの候補を見つけると、値を記録せず`secret-scan`エラーにして全体をFAILにします。これは候補検出であり、機密情報がないことの完全証明ではありません。検出された`native`と`review_utf8`を公開せず、隔離したstageで内容を確認します。
+ツールは`review_utf8`を走査し、接続資格情報・接続先に使われるキーの候補を見つけると、値を記録せず`secret-scan`エラーにして全体をFAILにします。接続文字列を含むDBでは想定される安全側の停止ですが、PASSやbaselineにはしません。検出された`native`と`review_utf8`は隔離stage内だけで確認し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。これは候補検出であり、機密情報がないことの完全証明ではありません。
 
 `-Mode StartupProbe`ではレポート、`tables.json`、`relations.json`、`references.json`を省略し、起動経路の確認に必要な資産を優先して出します。`export-summary.json`の`skipped_by_mode`に`reports`を記録し、実在数は`catalog.json`で保持します。AutoExecから省略対象へ続く場合と、正式なbaseline/候補比較では既定の`Full`を使います。
 

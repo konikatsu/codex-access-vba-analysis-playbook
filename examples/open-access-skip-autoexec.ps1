@@ -77,8 +77,8 @@ if ([string]::IsNullOrWhiteSpace($RunId)) {
 if ([string]::IsNullOrWhiteSpace($ResultPath)) {
     throw 'ResultPath is required for a self-test.'
 }
-if ($CommandText -eq 'RUN_SELFTEST_DML' -and [string]::IsNullOrWhiteSpace($AllowlistPath)) {
-    throw 'RUN_SELFTEST_DML requires an allowlist file that is independent of the application INI.'
+if ([string]::IsNullOrWhiteSpace($AllowlistPath)) {
+    throw 'Every self-test requires an allowlist file that is independent of the application INI.'
 }
 
 $existingAccess = @(Get-Process -Name MSACCESS -ErrorAction SilentlyContinue)
@@ -245,12 +245,10 @@ if ($finishedAt -lt $startedAt) {
     throw 'Self-test finished_at precedes started_at.'
 }
 
-if ($CommandText -eq 'RUN_SELFTEST_DML') {
-    if ($result.PSObject.Properties.Name -notcontains 'target_allowlist_match' -or
-        $result.target_allowlist_match -isnot [bool] -or
-        -not $result.target_allowlist_match) {
-        throw 'DML self-test did not prove an independent allowlist match before writing.'
-    }
+if ($result.PSObject.Properties.Name -notcontains 'target_allowlist_match' -or
+    $result.target_allowlist_match -isnot [bool] -or
+    -not $result.target_allowlist_match) {
+    throw 'Self-test did not prove an independent allowlist match before accessing application data.'
 }
 
 $remainingAccess = @(Get-Process -Name MSACCESS -ErrorAction SilentlyContinue)

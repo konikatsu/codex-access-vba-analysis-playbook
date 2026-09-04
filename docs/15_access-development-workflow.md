@@ -27,11 +27,11 @@
 1. 原本とINIをコピーし、原本とコピーのSHA-256を記録する。
 2. 既存baselineの元SHA-256、Access版、参照設定、起動経路、Export条件が一致するか確認する。
 3. 再利用できるbaselineがあれば、StartupProbeやIF追加を繰り返さない。
-4. baselineがなければ、DAOと`StartupProbe`でAutoExec、起動フォーム、イベント、最初の呼出先関数を調べる。
+4. baselineがなければ、DAOと、利用できる場合は`StartupProbe`でAutoExec、起動フォーム、イベント、最初の呼出先関数を調べる。`StartupProbe`を使えない場合は[空DB救出解析](requirements/07_empty-database-recovery-import.md)へ切り替える。
 5. 自動起動がなく、無効化が不要なら`not-required`と記録する。
 6. 完全一致の`SKIP_AUTOEXEC`分岐が既にあれば、重複追加しない。
-7. 分岐がなければ、Shift-bypassで開いた作業コピーの起動関数へ一度だけ追加する。
-8. 通常起動を許す前に検証用接続先の同一性と到達性を確認し、通常起動と`/cmd SKIP_AUTOEXEC`起動を別々に検証する。
+7. 分岐がなくShift-bypassを使用できる場合は、作業コピーの起動関数へ一度だけ追加する。`AllowBypassKey=False`なら強行せず[例外手順](17_access-development-workflow-reference.md#12-例外時の切替)へ進む。
+8. 通常起動、自己テスト、GUIを許す前に、[起動経路上の全接続元・接続先を棚卸し](17_access-development-workflow-reference.md#231-通常起動前の外部接続棚卸し)し、すべてが承認済み検証環境を指すことと到達性を確認する。通常起動と`/cmd SKIP_AUTOEXEC`起動は別々に検証する。
 9. 合格した自動起動無効化対応版を開発baselineとして凍結する。
 
 ```vb
@@ -50,7 +50,7 @@ AutoExecマクロ自体は削除・改名しません。最初の副作用より
 - 対象原本と作業前SHA-256:
 - baseline再利用判定:
 - 自動起動と起動経路:
-- 無効化方法とAllowBypassKey（一時変更時は承認者・承認日時を含む）:
+- 無効化方法、AllowBypassKey（一時変更時は承認者・承認日時を含む）、外部接続棚卸しとallowlistのSHA-256:
 - 通常起動・無効化起動の検証結果:
 - 使用するbaselineとSHA-256:
 ```
@@ -87,6 +87,7 @@ COMの`OpenCurrentDatabase`へ`/cmd`は渡せません。`AutomationSecurity`だ
 
 - 必須ヒアリングが未完了
 - 自動起動または無効化方法が未確認
+- 起動経路上の接続元または接続先を確定できない
 - `AllowBypassKey=False`（解析はDAO、[disabled mode](requirements/01_startup-bypass.md)または空DB、修正は依頼元確認後の承認済み経路へ切替）
 - モーダルダイアログまたはCOMタイムアウト
 - 原本やbaselineのSHA-256が途中で変化
