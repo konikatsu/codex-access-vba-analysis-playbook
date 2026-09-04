@@ -9,19 +9,9 @@
 
 Access DBには、AutoExec、起動フォーム、起動イベントから直ちに外部DBへ接続するものがあります。接続先が停止している、ネットワークやINIが合わない、資格情報に問題がある場合、接続エラーやモーダルダイアログで通常起動とCOM保守処理が入口から停止します。その状態ではDBを開いて原因調査や修正を行うこと自体が難しくなるため、自動起動の把握と安全な無効化方法の確保を作業着手の前提条件にします。
 
-作業担当は、対象Access資産へ触る前に、依頼元へ自動起動情報を必ずヒアリングします。原本のコピー、ハッシュ取得、DAO確認、StartupProbe、Access起動も、このヒアリングが終わるまでは開始しません。
+作業担当は、対象Access資産へ触る前に、[Access作業共通ルールの必須ヒアリング](00_access-work-common-rules.md#前提条件-依頼元へ自動起動情報を必ずヒアリングする)を完了します。質問、復唱、記録、完了条件は同節を正典とし、原本のコピー、ハッシュ取得、DAO確認、StartupProbe、Access起動も完了前には開始しません。
 
-必須質問:
-
-1. 自動起動の有無を把握しているか: `あり / なし / 不明`
-2. 分かっている起動経路: AutoExec、起動フォーム、イベント、最初の呼出先関数
-3. 既存の無効化方法: `SKIP_AUTOEXEC / Shift-bypass / 保守フラグ / なし / 不明`
-4. 検証済みの自動起動無効化対応版またはbaselineがあるか。ある場合はパス、SHA-256、検証証跡
-5. 通常起動時に分かっている外部接続、ダイアログ、副作用
-
-依頼文に回答が含まれている場合も、作業担当が理解した内容を復唱して依頼元へ確認します。全5項目に`不明`を含む回答が揃い、復唱確認とstage記録を終えた状態をヒアリング完了とします。これは実装開始の許可ではありません。`不明`はヒアリング回答としては有効ですが、作業開始宣言の最終判定には使えません。
-
-ヒアリングが完了しない場合は対象Access資産へ触らず、作業を開始しません。ヒアリング完了後は安全な事前調査にだけ進めます。`不明`項目は[2.1](#21-最初に自動起動を調べる)で確定します。
+`不明`はヒアリング回答としては有効ですが、作業開始宣言の最終判定には使えません。ヒアリング完了後は安全な事前調査だけに進み、[2.1](#21-最初に自動起動を調べる)で確定します。
 
 ## 1. 基本方針
 
@@ -43,19 +33,7 @@ Access DBには、AutoExec、起動フォーム、起動イベントから直ち
 
 前提条件のヒアリング後、依頼元が把握していない情報は、作業担当が原本のハッシュ取得、コピー、DAO確認、`StartupProbe`までを安全な事前調査として確認します。依頼元がAccess内部を知っていることは前提にしません。
 
-作業担当は、Access資産への実装、VBE編集、`LoadFromText`、DDL、データ更新、コンパイルを始める前に、次を依頼元へ短く宣言します。
-
-```text
-作業開始宣言:
-- 対象原本とSHA-256:
-- baseline再利用判定: reusable / rebuild-required
-- 自動起動: あり / なし
-- 起動経路: AutoExec、起動フォーム、イベント、最初の呼出先関数
-- 無効化方法: not-required / existing-SKIP_AUTOEXEC / add-SKIP_AUTOEXEC / approved-exception
-- AllowBypassKey:
-- 通常起動と無効化起動の検証証跡:
-- 今回使う開発baselineとSHA-256:
-```
+作業担当は、Access資産への実装、VBE編集、`LoadFromText`、DDL、データ更新、コンパイルを始める前に、[共通ルールの作業前ゲート](00_access-work-common-rules.md#05-作業前ゲートを必ず書く)を記入して依頼元へ短く宣言します。同ゲートの項目12から17を、自動起動に関する正典の宣言項目とします。
 
 `自動起動: 未確認`のまま実装へ進みません。事前調査で判定できない場合は、分からない箇所と安全な次手を報告して作業を止めます。既存baselineを再利用する場合は、保存済みの調査・検証証跡を示せばよく、StartupProbeやIF追加を繰り返しません。
 
@@ -177,7 +155,7 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 7. 外部ウォッチドッグの時間上限を開始し、`OpenCurrentDatabase`の直前に仮想Shiftを押す。
 8. Shiftを押したまま`OpenCurrentDatabase`を呼び、正常復帰直後にShiftを解放する。例外、ハング、タイムアウトでもウォッチドッグが必ず解放する。
 9. 起動直後に、フォーム、起動ログ、段階ログなどから通常起動処理が走っていないことを確認する。
-10. タイムアウト時はShiftを解放してから記録したPIDだけを停止する。既存のAccessプロセスを一括停止しない。
+10. タイムアウト時はウォッチドッグでShiftを解放する。停止前に、記録PIDに属するトップレベルウィンドウを時間制限付きで1回だけ列挙し、クラス名、キャプション、可視・有効状態、所有関係をstage記録へ残してから、記録したPIDだけを停止する。既存のAccessプロセスを一括停止しない。
 11. 終了後にPID消滅、`.laccdb`消失、仮想Shift解放を確認する。
 
 環境フィンガープリントは、同一ホストの直近成功記録または新しい対話型PowerShellの値と比較します。必須変数の欠落や想定外の差があればCOM診断を中断し、既知の正常な実行環境を復元してから再確認します。
@@ -190,13 +168,19 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 `Application.Forms.Count=0`は確認項目の一つですが、それだけで起動処理が何も実行されなかったとは断定しません。フォームを開かない初期処理もあるため、段階ログや起動処理固有の証跡も確認します。
 
+ウィンドウ列挙でダイアログを観測できた場合だけ`modal-observed`と記録します。ウィンドウが見つからない場合もモーダル不在の証明にはせず、タイムアウト原因は`unknown`のまま段階ログや接続先を切り分けます。
+
 ログや副作用が無いという否定的証拠だけで抑止成功と判定しません。外部接続より前に必ずマーカーを残す安全なカナリアDB、または承認済みの使い捨て検証コピーで肯定対照を取り、その証跡が確認対象では存在しないことを確認します。対照取得だけを目的に、本体や到達先不明の起動処理を実行しません。
 
 `hWndAccessApp`からPIDを記録できなかった場合は、起動前の`MSACCESS.EXE`スナップショットと`Win32_Process`を使います。停止候補は「起動前に存在しない」「起動操作の時間窓内に生成」「実行ファイルが期待する`MSACCESS.EXE`」「コマンドラインに独立した引数`-Embedding`がある」をすべて満たすものに限定します。候補が一意でなければ停止しません。`MainWindowHandle=0`、プロセス名だけ、親子関係だけでは識別しません。
 
 タイムアウトや強制停止を経験した作業コピーは`failed`扱いにし、以後の候補へ昇格させません。`.laccdb`または`.ldb`は対象PIDの消滅を確認した後だけ片付けます。停止候補を一意に識別できない場合は停止せず、前提が回復するまでそのstageを中断します。
 
-`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAO、次節のdisabled mode、または空DB方式へ切り替えます。起動関数へIF分を追加する必要がある場合は、起動依存先を使い捨て検証環境へ向けた承認済み保守コピーなど、安全に通常起動できる経路を先に用意します。安全な初回編集経路がない状態で本体を開きません。
+`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAO、次節のdisabled mode、または空DB方式へ切り替えます。修正が必要なら、まず停止中の依存先を承認済み検証環境で復旧するか、使い捨て検証環境を指すINIへ差し替え、安全に通常起動できる経路を用意します。
+
+依存先を用意できず、起動関数へ保守分岐を追加する必要がある場合に限り、明示承認を得た使い捨てコピーをDAOで排他・読み書きオープンし、`AllowBypassKey=True`へ一時変更する救出経路を候補にできます。変更前の値、作業前SHA-256、操作ログを記録し、次回オープンから有効になることを前提にShift-bypassで一度だけ開きます。保守分岐を追加して閉じた後は`AllowBypassKey`を元の`False`へ戻し、DAOで復元値を確認します。原本では行わず、排他オープン、プロパティ変更、元値復元のいずれかを確認できない場合は中断します。
+
+この救出経路は対象のAccess/ACE・ファイル形式で実機確認が必要です。現行の外部Exportツールは一時変更も、`AllowBypassKey=False`へ戻した最終候補のExportも実装していません。最終候補の起動抑止、正式コンパイル、全資産diffを承認済み経路で証明できるまでは、開発baselineへ昇格せず`要実機確認`とします。
 
 ### 2.5 disabled modeによる静的救出
 
@@ -262,7 +246,7 @@ session_sequence
 2. 新しいstageへACCDBと対応INIをコピーする。
 3. コピー元ACCDBの操作前SHA-256を記録する。
 4. コピー直後に、コピー元と作業コピーのSHA-256が一致することを確認する。
-5. 通常起動、自己テスト、GUI試験を許す場合は、INIの接続先が承認済みの使い捨て検証環境と一致し、同じプロトコル・ドライバーによる時間制限付きの読み取り確認で到達できることを確かめる。静的な起動抑止作業だけなら、停止中の依存先を起動条件にしない。
+5. 通常起動、自己テスト、GUI試験を許す場合は、INIの接続先が承認済みの使い捨て検証環境と一致し、同じプロトコル・ドライバーによる時間制限付きの読み取り確認で到達できることを確かめる。静的作業で停止中の依存先を起動条件にしないのは、自動起動抑止を肯定対照で確認済みの場合だけとする。対象コピーが信頼済み場所にある場合は、依存先の到達性を確認するか、目的に合う非信頼stageへ移してから開く。
 6. 無関係な`MSACCESS.EXE`と残留`.laccdb`がないことを確認する。
 
 例:
@@ -529,6 +513,7 @@ $runId = [guid]::NewGuid().ToString('N')
 成功と判断する前に、次を保存します。
 
 - 成功ACCDBと対応INI
+- 原本の作業前SHA-256と作業後SHA-256、および一致結果
 - baselineと候補のSHA-256
 - before/after/diff
 - セルフレビュー結果と実施日時
@@ -576,6 +561,7 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 | `RPC_E_DISCONNECTED` / `0x800706BE` | Access障害と断定せず、モーダル、段階ログ、INI接続先の同一性・到達性を確認 |
 | exeやCOM DLLが見つからないように見える | 環境フィンガープリントと展開済みレジストリ値を確認し、完全環境と比較 |
 | `AllowBypassKey=False` | Shiftを強行しない。解析はDAO、検証済みdisabled mode、または空DB方式、修正は依頼元確認後の承認済み経路へ切替 |
+| `AllowBypassKey=False`かつ起動依存先が停止 | まず承認済み検証環境またはテスト用INIで依存先を用意する。できず修正が必要なら、明示承認した使い捨てコピーだけで`AllowBypassKey`の一時変更を検討する。現行ツールでは完結しないため、最終候補の検証経路がない場合は`要実機確認`で中断する |
 | 固定`/cmd`未対応DBをGUI/VBEで開く | Shift-bypassを使う。`AllowBypassKey=False`なら空DB方式または承認済みコピーへ切替 |
 | 解析だけ必要で直接開けない | [空DBインポート方式](requirements/07_empty-database-recovery-import.md)を使用し、作業コピーからAutoExecを除外して選択インポート |
 | 空DB方式で解析できた | 構造理解には使用可、正式差分基準には使用不可 |
@@ -600,8 +586,11 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
 - [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
+- [Bypass startup options when you open a database](https://support.microsoft.com/en-us/access/bypass-startup-options-when-you-open-a-database)
 - [Trusted Locations for Office files](https://learn.microsoft.com/en-us/microsoft-365-apps/security/trusted-locations)
 - [Set name AutoCorrect options](https://support.microsoft.com/en-us/access/set-name-autocorrect-options)
 - [Command-line switches for Microsoft Office products](https://support.microsoft.com/en-us/office/lifecycle/command-line-switches-for-microsoft-office-products)
 - [Win32_Process class](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process)
+- [EnumWindows function](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows)
+- [GetWindowThreadProcessId function](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowthreadprocessid)
 - [Registry value types](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types)

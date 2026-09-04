@@ -70,14 +70,14 @@ Alt + F11
 
 ## 信頼済み場所に置く
 
-繰り返しテストする作業コピーでは、毎回セキュリティ警告に対応するより、
-作業フォルダをAccessの信頼済み場所に追加する方が安定します。
+繰り返し行うGUI/VBE・自己テストでは、毎回セキュリティ警告に対応するより、
+その用途だけの専用stageをAccessの信頼済み場所に追加する方が安定します。
 
 推奨:
 
 ```text
-プロジェクトルート、または作業コピーを置く親フォルダ
-例: C:\dev\project-name\
+GUI/VBE開発と自己テストだけに使う専用stage
+例: C:\dev\project-name\stage_gui_trusted\
 ```
 
 設定場所:
@@ -92,7 +92,9 @@ Access
 -> 新しい場所の追加
 ```
 
-可能なら「サブフォルダーも信頼する」をONにします。
+プロジェクトルート、原本、静的Export、救出解析のコピーを含む親フォルダ全体は信頼済みにしません。Trusted LocationではVBAや外部データ接続を含むactive contentが有効になるためです。
+
+「サブフォルダーも信頼する」は原則OFFにします。専用stage配下をすべて同じ目的で管理し、書込み権限も制限できる場合だけONを検討します。
 
 重要:
 
@@ -158,5 +160,10 @@ $access.RunCommand(126)
 - 本体DBで試さず、作業コピーで確認します。
 - 失敗したコピーを修復しながら続けず、新しい作業コピーで再確認します。
 - セキュリティ警告を無視したまま、`LoadFromText` やフォーム保存の失敗をDB破損と断定しないでください。
-- 信頼済みの場所に作業フォルダを置くと、セキュリティ警告を減らせる場合があります。
+- GUI/VBE・自己テスト専用stageを信頼済みの場所にすると、セキュリティ警告を減らせる場合があります。
 - `/cmd SKIP_AUTOEXEC` と信頼済み場所は別の対策です。両方必要になる場合があります。
+
+## 参考
+
+- [Trusted Locations for Office files](https://learn.microsoft.com/en-us/microsoft-365-apps/security/trusted-locations)
+- [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)

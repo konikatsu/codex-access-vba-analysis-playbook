@@ -70,6 +70,8 @@ $password = Read-Host 'Database password' -AsSecureString
 
 ウォッチドッグは時間上限でShiftを解放し、`hWndAccessApp`から記録したPIDと実行ファイルが一致するAccessだけを停止します。既存の`MSACCESS.EXE`を一括停止しません。
 
+現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。タイムアウトだけでモーダルダイアログが原因と断定せず、必要な案件では外部ラッパーで記録PIDのウィンドウ証跡を取得します。
+
 Shiftが既に押されている場合、ツールは入力状態を変更せず失敗します。環境変数の有無と値は、ユーザープロファイル等をマスクして`environment.json`へ記録します。`PATHEXT`や`CommonProgramFiles`が欠けた制限環境では、DLL消失と誤診断しないようCOM起動前に失敗させます。
 
 `open_forms_after_open=0`は補助証拠にすぎません。通常起動処理が走らなかったことは、対象DB固有の起動ログ、カナリア、副作用の不在などをstage記録でも確認します。
