@@ -16,7 +16,12 @@ param(
 
     [switch]$IncludeLinkedTableDetails,
 
-    [switch]$KeepWorkingCopy
+    [switch]$KeepWorkingCopy,
+
+    [ValidateSet('Fail', 'RestrictedLocal')]
+    [string]$SensitiveOutputPolicy = 'Fail',
+
+    [switch]$AcknowledgeRestrictedOutput
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,6 +89,7 @@ $script:DataMacroTablesProbed = 0
 $script:DataMacroAbsentCount = 0
 $script:DataMacroProbeErrorCount = 0
 $script:SensitiveTokenHits = New-Object System.Collections.Generic.List[object]
+$script:EmptyObjects = New-Object System.Collections.Generic.List[object]
 
 function Add-LogLine {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -252,11 +258,12 @@ function Add-ManifestFile {
         [string]$ObjectType = '',
         [string]$ObjectName = '',
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Encoding
+        [Parameter(Mandatory = $true)][string]$Encoding,
+        [switch]$AllowEmpty
     )
 
     $file = Get-Item -LiteralPath $Path
-    if ($file.Length -le 0) {
+    if ($file.Length -eq 0 -and -not $AllowEmpty) {
         throw "Exported file is empty: $Path"
     }
 
@@ -268,6 +275,7 @@ function Add-ManifestFile {
         object_name = $ObjectName
         relative_path = Get-RelativePathForManifest -Path $Path
         byte_length = $file.Length
+        content_state = if ($file.Length -eq 0) { 'empty' } else { 'nonempty' }
         encoding = $Encoding
         sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
     })
@@ -276,12 +284,21 @@ function Add-ManifestFile {
 function Convert-ToReviewUtf8 {
     param(
         [Parameter(Mandatory = $true)][string]$NativePath,
-        [Parameter(Mandatory = $true)][string]$ReviewPath
+        [Parameter(Mandatory = $true)][string]$ReviewPath,
+        [switch]$AllowEmpty
     )
 
     $bytes = [IO.File]::ReadAllBytes($NativePath)
     if ($bytes.Length -eq 0) {
-        throw "Cannot convert an empty file: $NativePath"
+        if (-not $AllowEmpty) {
+            throw "Cannot convert an empty file: $NativePath"
+        }
+        $reviewParent = Split-Path -Parent $ReviewPath
+        if (-not (Test-Path -LiteralPath $reviewParent)) {
+            [void](New-Item -ItemType Directory -Path $reviewParent -Force)
+        }
+        Write-Utf8Text -Path $ReviewPath -Text ''
+        return 'empty'
     }
 
     $encodingName = ''
@@ -748,9 +765,18 @@ function Export-ObjectCategory {
 
         try {
             $AccessApplication.SaveAsText($AccessObjectType, $name, $nativePath)
-            $detectedEncoding = Convert-ToReviewUtf8 -NativePath $nativePath -ReviewPath $reviewPath
-            Add-ManifestFile -Tier 'native' -SourceKind 'SaveAsText' -Category $Category -ObjectType $ObjectType -ObjectName $name -Path $nativePath -Encoding $detectedEncoding
-            Add-ManifestFile -Tier 'review_utf8' -SourceKind 'derived-text' -Category $Category -ObjectType $ObjectType -ObjectName $name -Path $reviewPath -Encoding 'UTF-8 without BOM'
+            $allowEmpty = $Category -eq 'modules'
+            $detectedEncoding = Convert-ToReviewUtf8 -NativePath $nativePath -ReviewPath $reviewPath -AllowEmpty:$allowEmpty
+            $reviewEncoding = if ($detectedEncoding -eq 'empty') { 'empty' } else { 'UTF-8 without BOM' }
+            Add-ManifestFile -Tier 'native' -SourceKind 'SaveAsText' -Category $Category -ObjectType $ObjectType -ObjectName $name -Path $nativePath -Encoding $detectedEncoding -AllowEmpty:$allowEmpty
+            Add-ManifestFile -Tier 'review_utf8' -SourceKind 'derived-text' -Category $Category -ObjectType $ObjectType -ObjectName $name -Path $reviewPath -Encoding $reviewEncoding -AllowEmpty:$allowEmpty
+            if ((Get-Item -LiteralPath $nativePath).Length -eq 0) {
+                [void]$script:EmptyObjects.Add([pscustomobject]@{
+                    category = $Category
+                    object_type = $ObjectType
+                    object_name = $name
+                })
+            }
             $script:Exported[$Category]++
         }
         catch {
@@ -819,16 +845,21 @@ function Invoke-ReviewSecretScan {
 
             $hit = [pscustomobject]@{
                 relative_path = $record.relative_path
-                object_type = $record.object_type
-                object_name = $record.object_name
                 line = $lineNumber
                 key = $key
+                file_sha256 = $record.sha256
             }
             [void]$script:SensitiveTokenHits.Add($hit)
-            Add-ExportError -Stage 'secret-scan' -ObjectType $record.object_type -ObjectName $record.object_name -Message (
-                "Potential connection secret or endpoint key '$key' found in $($record.relative_path) near line $lineNumber. The value was not logged."
-            )
+            if ($SensitiveOutputPolicy -eq 'Fail') {
+                Add-ExportError -Stage 'secret-scan' -ObjectType $record.object_type -ObjectName $record.object_name -Message (
+                    "Potential connection secret or endpoint key '$key' found in $($record.relative_path) near line $lineNumber. The value was not logged."
+                )
+            }
         }
+    }
+
+    if ($script:SensitiveTokenHits.Count -gt 0 -and $SensitiveOutputPolicy -eq 'RestrictedLocal') {
+        Add-LogLine -Message "Sensitive source candidates detected: $($script:SensitiveTokenHits.Count). Output is restricted to the local isolated stage."
     }
 }
 
@@ -934,8 +965,48 @@ function Test-ExpectedAccessProcess {
         ([DateTime]$process.CreationDate).ToUniversalTime().Ticks -eq $ExpectedCreationTimeUtcTicks)
 }
 
+function Assert-RestrictedLocalOutputPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if ($fullPath.StartsWith('\\', [StringComparison]::Ordinal)) {
+        throw 'RestrictedLocal output cannot use a UNC path.'
+    }
+
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    $drive = New-Object IO.DriveInfo($root)
+    if ($drive.DriveType -ne [IO.DriveType]::Fixed) {
+        throw "RestrictedLocal output requires a fixed local drive: $root"
+    }
+
+    $current = $fullPath
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "RestrictedLocal output cannot traverse a reparse point: $current"
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $current) {
+            break
+        }
+        $current = $parent
+    }
+}
+
+if ($SensitiveOutputPolicy -eq 'RestrictedLocal' -and -not $AcknowledgeRestrictedOutput) {
+    throw 'RestrictedLocal requires -AcknowledgeRestrictedOutput.'
+}
+if ($SensitiveOutputPolicy -eq 'Fail' -and $AcknowledgeRestrictedOutput) {
+    throw '-AcknowledgeRestrictedOutput is valid only with -SensitiveOutputPolicy RestrictedLocal.'
+}
+
 $script:SourcePath = (Resolve-Path -LiteralPath $DatabasePath).Path
 $script:OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
+if ($SensitiveOutputPolicy -eq 'RestrictedLocal') {
+    Assert-RestrictedLocalOutputPath -Path $script:OutputPath
+}
 $sourceExtension = [IO.Path]::GetExtension($script:SourcePath)
 if ($sourceExtension -notin @('.accdb', '.mdb')) {
     throw "DatabasePath must be an ACCDB or MDB file: $sourceExtension"
@@ -1263,14 +1334,30 @@ $manifestCsvPath = Join-Path $script:OutputPath 'manifest.csv'
 $errorsPath = Join-Path $script:OutputPath 'export-errors.json'
 $logPath = Join-Path $script:OutputPath 'export.log'
 $summaryPath = Join-Path $script:OutputPath 'export-summary.json'
+$sensitiveFindingsPath = Join-Path $script:OutputPath 'sensitive-findings.json'
 
 Write-Utf8Json -Path $manifestPath -Value @($script:Manifest.ToArray())
 $script:Manifest.ToArray() | Export-Csv -LiteralPath $manifestCsvPath -NoTypeInformation -Encoding UTF8
 Write-Utf8Json -Path $errorsPath -Value @($script:Errors.ToArray())
 Write-Utf8Text -Path $logPath -Text (($script:LogLines.ToArray() -join [Environment]::NewLine) + [Environment]::NewLine)
+$sensitiveFindings = [ordered]@{
+    schema_version = 1
+    source_sha256 = $sourceHashBefore
+    findings = @($script:SensitiveTokenHits.ToArray() | Sort-Object relative_path, line, key)
+}
+Write-Utf8Json -Path $sensitiveFindingsPath -Value $sensitiveFindings
 
 $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
-$status = if ($script:Errors.Count -eq 0) { 'PASS' } else { 'FAIL' }
+$sensitiveFindingsHash = (Get-FileHash -LiteralPath $sensitiveFindingsPath -Algorithm SHA256).Hash
+$status = if ($script:Errors.Count -gt 0) {
+    'FAIL'
+}
+elseif ($script:SensitiveTokenHits.Count -gt 0) {
+    'PASS_RESTRICTED'
+}
+else {
+    'PASS'
+}
 $summary = [ordered]@{
     status = $status
     mode = $Mode
@@ -1288,11 +1375,17 @@ $summary = [ordered]@{
     access_pid = $accessPid
     access_creation_time_utc = $accessCreationTimeUtc
     linked_table_details_requested = [bool]$IncludeLinkedTableDetails
+    sensitive_output_policy = $SensitiveOutputPolicy
+    restricted_output_acknowledged = [bool]$AcknowledgeRestrictedOutput
+    disclosure_status = if ($script:SensitiveTokenHits.Count -gt 0) { 'RESTRICTED' } else { 'NO_CANDIDATE_DETECTED' }
     skipped_by_mode = @($script:SkippedByMode.ToArray())
     data_macro_tables_probed = $script:DataMacroTablesProbed
     data_macro_absent_count = $script:DataMacroAbsentCount
     data_macro_probe_error_count = $script:DataMacroProbeErrorCount
     sensitive_token_hit_count = $script:SensitiveTokenHits.Count
+    sensitive_findings_sha256 = $sensitiveFindingsHash
+    empty_object_count = $script:EmptyObjects.Count
+    empty_objects = @($script:EmptyObjects.ToArray())
     discovered = $script:Discovered
     exported = $script:Exported
     manifest_records = $script:Manifest.Count
@@ -1302,7 +1395,7 @@ $summary = [ordered]@{
 }
 Write-Utf8Json -Path $summaryPath -Value $summary
 
-if ($status -eq 'PASS' -and -not $KeepWorkingCopy) {
+if ($status -in @('PASS', 'PASS_RESTRICTED') -and -not $KeepWorkingCopy) {
     $resolvedWorkingDir = [IO.Path]::GetFullPath($script:WorkingDir)
     $expectedWorkingDir = [IO.Path]::GetFullPath((Join-Path $script:OutputPath '_working'))
     $outputPrefix = $script:OutputPath.TrimEnd('\') + '\'
@@ -1313,10 +1406,15 @@ if ($status -eq 'PASS' -and -not $KeepWorkingCopy) {
     Remove-Item -LiteralPath $resolvedWorkingDir -Recurse -Force
 }
 
-if ($status -ne 'PASS') {
+if ($status -eq 'FAIL') {
     throw "Access export failed. Review export-errors.json in: $script:OutputPath"
 }
 
-Write-Host "PASS: exported Access assets from a disposable copy."
+if ($status -eq 'PASS_RESTRICTED') {
+    Write-Warning 'PASS_RESTRICTED: export is complete, but sensitive source candidates were detected. Keep every artifact in the local isolated stage and do not send it to AI or publish it.'
+}
+else {
+    Write-Host "PASS: exported Access assets from a disposable copy."
+}
 Write-Host "Output: $script:OutputPath"
 Write-Host "Manifest SHA-256: $manifestHash"

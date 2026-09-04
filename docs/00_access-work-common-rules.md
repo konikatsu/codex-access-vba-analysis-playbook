@@ -211,6 +211,7 @@ AutomationSecurity = 3:
 - 仮想Shift、`AutomationSecurity=3`、専用PID、外部ウォッチドッグを一組にする。
 - `native`、UTF-8派生、manifest、エラー一覧、メタデータを同時に作る。
 - baselineと候補でコンパイル回数とExport手順を揃える。
+- 接続情報候補を含む既存DBではsecret-scanを無効化せず、明示的な`RestrictedLocal`で`PASS_RESTRICTED`とし、全成果物をローカル隔離stageから出さない。
 
 ## 4. DB内のExportAnalysisInfoは解析専用コピーに限定する
 

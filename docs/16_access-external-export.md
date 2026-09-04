@@ -51,6 +51,20 @@ $password = Read-Host 'Database password' -AsSecureString
   -DatabasePassword $password
 ```
 
+接続文字列生成コードを含むことが既知のDBでは、secret-scanを無効化せず、隔離stage限定の結果として明示的に扱います。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File ".\examples\export-access-assets.ps1" `
+  -DatabasePath "C:\work\project_work\stepNNN_baseline\01_source_copy\app.source-copy.accdb" `
+  -OutputDirectory "C:\work\project_work\stepNNN_baseline\02_startup_probe" `
+  -Mode StartupProbe `
+  -SensitiveOutputPolicy RestrictedLocal `
+  -AcknowledgeRestrictedOutput
+```
+
+`RestrictedLocal`はscanの省略や検出結果の承認ではありません。検出を続け、Export自体にほかのエラーがなければ`PASS_RESTRICTED`とします。出力は機密を含む可能性があるため、ローカル固定ドライブ上の隔離stageから出さず、ネットワーク共有、reparse point、同期フォルダー、公開リポジトリ、AIへの依頼、申し送りへ転載しません。ツールはUNC、非固定ドライブ、既存のreparse pointを拒否します。同期フォルダーかどうかは作業者が確認します。既定の`Fail`では従来どおり、候補を1件でも検出すると全体を`FAIL`にします。
+
 リンクテーブルのフィールドやインデックスは、ドライバーが接続先へ到達する場合があります。既定ではリンク先詳細を読みません。隔離した検証環境で必要性を確認した場合だけ`-IncludeLinkedTableDetails`を使います。
 
 ## 起動と後片付け
@@ -106,18 +120,19 @@ Shiftが既に押されている場合、ツールは入力状態を変更せず
       data_macros/
   manifest.json
   manifest.csv
+  sensitive-findings.json
   export-summary.json
   export-errors.json
   export.log
 ```
 
-`native/saveastext`はAccessの出力バイトを変更しません。`review_utf8`はBOMと実バイトから文字コードを判定して作るUTF-8派生物です。差分の正本は`native`です。SaveAsText本文は完全性を守るためマスクしないので、保存クエリやVBAに埋め込まれた接続文字列もそのまま含み得ます。
+`native/saveastext`はAccessの出力バイトを変更しません。`review_utf8`はBOMと実バイトから文字コードを判定して作るUTF-8派生物です。差分の正本は`native`です。SaveAsText本文は完全性を守るためマスクしないので、保存クエリやVBAに埋め込まれた接続文字列もそのまま含み得ます。Accessが正常に0バイトを出力したModuleだけは、存在する空資産としてnativeとreviewの両方を0バイトで記録し、manifestの`content_state=empty`とSHA-256で識別します。ほかのオブジェクト種別の0バイトは`FAIL`です。
 
 `tables.json`にはローカルテーブルのフィールドとインデックス、リンクテーブルの安全化した接続情報を記録します。接続文字列の資格情報、サーバー名、DB名、ファイルパスは既定でマスクします。
 
 `environment.json`は実行環境の診断証跡です。ユーザープロファイル配下は`<user-profile>`へ置換されますが、公開前には顧客固有のパスや値が残っていないことを別途確認します。
 
-ツールは`review_utf8`を走査し、接続資格情報・接続先に使われるキーの候補を見つけると、値を記録せず`secret-scan`エラーにして全体をFAILにします。接続文字列を含むDBでは想定される安全側の停止ですが、PASSやbaselineにはしません。検出された`native`と`review_utf8`は隔離stage内だけで確認し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。これは候補検出であり、機密情報がないことの完全証明ではありません。
+ツールは`review_utf8`を走査し、接続資格情報・接続先に使われるキーの候補について、値を含めず相対パス、行、キー、対象ファイルのSHA-256を`sensitive-findings.json`へ記録します。既定の`Fail`では候補を`secret-scan`エラーにして全体を`FAIL`にします。明示した`RestrictedLocal`では検出件数と同ファイルのSHA-256を保持したまま`PASS_RESTRICTED`にできますが、出力の公開可を意味しません。候補が0件でも機密情報がないことの完全証明にはなりません。
 
 `-Mode StartupProbe`ではレポート、`tables.json`、`relations.json`、`references.json`を省略し、起動経路の確認に必要な資産を優先して出します。`export-summary.json`の`skipped_by_mode`に`reports`を記録し、実在数は`catalog.json`で保持します。AutoExecから省略対象へ続く場合と、正式なbaseline/候補比較では既定の`Full`を使います。
 
@@ -125,16 +140,19 @@ Shiftが既に押されている場合、ツールは入力状態を変更せず
 
 ## PASS条件
 
-`export-summary.json`の`status`が`PASS`であり、次が成立することを確認します。
+通常出力は`export-summary.json`の`status=PASS`、接続情報候補を含む隔離出力は`status=PASS_RESTRICTED`であり、次が成立することを確認します。
 
 - `source_sha256_before`と`source_sha256_after`が一致する。
 - `skipped_by_mode`以外の各カテゴリで`discovered`と`exported`が一致する。
 - `export-errors.json`が空配列である。
-- manifest記載ファイルが存在し、非空で、SHA-256が一致する。
+- manifest記載ファイルが存在し、空Moduleとして`content_state=empty`を記録したもの以外は非空で、SHA-256が一致する。
 - `manifest_sha256`と実際の`manifest.json`が一致する。
 - 専用Access PIDと`.laccdb`または`.ldb`が残っていない。
-- `sensitive_token_hit_count`が0である。
+- `PASS`では`sensitive_token_hit_count`が0である。
+- `PASS_RESTRICTED`では`sensitive_output_policy=RestrictedLocal`と確認スイッチが記録され、`disclosure_status=RESTRICTED`で、`sensitive-findings.json`のSHA-256がsummaryと一致する。
 - 対象DB固有の証拠でも通常起動処理の不実行を確認できる。
+
+`PASS_RESTRICTED`も正式なローカルbaseline Exportとして利用できます。ただしbaselineと候補は同じポリシーで出力し、`sensitive-findings.json`の差分をローカルで確認します。検出箇所が増減または変化した場合は、理由を説明できるまで候補を昇格しません。
 
 失敗時は`_working`を残します。強制停止された二次コピーやロックが残ったコピーは失敗物として扱い、次の作業へ再利用しません。
 
@@ -147,6 +165,7 @@ baseline記録には次を転記します。
 - `exporter_sha256`
 - `access_version`
 - `manifest_sha256`
+- `sensitive_findings_sha256`と`disclosure_status`
 - Export日時と結果
 
 元ACCDBのパス、接続先、資格情報、顧客固有情報を公開ログや申し送りへ転載しません。

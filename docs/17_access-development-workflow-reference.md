@@ -150,7 +150,7 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 1. DAOでリンクテーブルの`TableDef.Connect`と`SourceTableName`、パススルークエリの`QueryDef.Connect`と全保存クエリの`QueryDef.SQL`を読む。`Fields`、`Indexes`、`RefreshLink`、クエリ実行、レコード参照は行わない。
 2. `StartupProbe`または空DB救出解析のSaveAsTextから、マクロ、保存クエリ、フォーム・レポートの`RecordSource`、コントロールの`RowSource`、VBAの動的SQLを追う。INI読込み、DSN、`ConnectionString`、`OpenDatabase`、`CurrentProject.Connection`、`ADODB.Connection.Open`に加え、SQLの`IN`句、`[ODBC;`、`DATABASE=`、`DSN=`、`DBQ=`も接続元候補にする。APIやファイル操作については、`WinHttpRequest`、`XMLHTTP`、`ServerXMLHTTP`、`FollowHyperlink`、`URLDownloadToFile`、`Shell`、`FileSystemObject`、VBAの`Open`、UNCパス、URLリテラルを候補として追う。コードは実行しない。
-3. `AllowBypassKey=False`では現行ツールの`StartupProbe`を使えないため、DAOと空DB救出解析を使う。接続先キーを含むDBで`StartupProbe`が`secret-scan`によりFAILになった場合は安全側の停止として扱い、隔離stageの出力をローカルだけで確認する。PASSやbaselineにせず、外部へ送らない。
+3. `AllowBypassKey=False`では現行ツールの`StartupProbe`を使えないため、DAOと空DB救出解析を使う。接続先キーを含むことが既知のDBでは、secret-scanを無効化せず、明示的な`RestrictedLocal`ポリシーと確認スイッチを指定する。ほかのエラーがなければ`PASS_RESTRICTED`として正式なローカルExportにできるが、隔離stageから出さず、公開リポジトリ、AIへの依頼、申し送りへ転記しない。既定ポリシーの`FAIL`を手作業で昇格しない。
 4. 対象操作から到達する接続ごとに、設定元、マスクした接続先識別子、検証用接続先、到達性の証跡をstageへ残す。資格情報や実サーバー名は残さない。
 
 原本ACCDB、対応INI、起動経路、対象操作が前回記録と一致し、保存済み棚卸しのSHA-256も一致する場合は、baselineの棚卸しを再利用できます。変更後の候補で再利用するには、最終unified diffと依存先の再列挙により、この節で列挙した接続生成箇所と、それらへ到達する制御条件に追加・変更がないことも必要です。接続元、接続先、到達条件へ影響する変更があれば、候補を対象に棚卸しをやり直します。再利用時も、資格情報を含まない接続先allowlistのSHA-256と検証用接続先の到達性は実行前に再確認します。
@@ -217,7 +217,7 @@ Shift-bypassが使えずDAOだけでは不足する場合、検証済みの非�
 
 必須ヒアリングの完了後、まずbaseline記録の自動起動調査結果を確認します。元ファイルのSHA-256と起動経路が変わっておらず、自動起動無効化対応版が`PASS`ならStartupProbeを再実行せず、そのbaselineを再利用できます。記録がない、元ファイルが変わった、起動経路が変わった場合は2.1からやり直します。
 
-baseline作成を毎回繰り返してはいけません。次がすべて一致し、前回結果が`PASS`なら、既存baselineとそのExportを再利用します。
+baseline作成を毎回繰り返してはいけません。次がすべて一致し、前回のExport結果が`PASS`、または隔離条件を維持した`PASS_RESTRICTED`なら、既存baselineとそのExportを再利用します。
 
 - コンパイル済みbaseline ACCDBのSHA-256
 - 元ファイルのSHA-256と自動起動経路
@@ -227,6 +227,7 @@ baseline作成を毎回繰り返してはいけません。次がすべて一致
 - エクスポータのバージョンまたはSHA-256
 - 参照設定
 - Export manifestのSHA-256
+- `PASS_RESTRICTED`の場合はsensitive findingsのSHA-256と隔離場所
 - 前回のコンパイル、再オープン、Export検証結果
 - baselineと候補へ適用するコンパイル・Exportのセッション列
 
@@ -360,7 +361,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - VBA参照設定
 - データベースと起動設定
 
-Export処理では、保存クエリ、VBA、マクロ、DDL、DML、リンク先の実データ取得を実行しません。DAOメタデータ内のリンク接続情報は安全なキーだけを残してマスクします。SaveAsText原本は変更せず、接続情報候補を検出した場合は全体をFAILにします。
+Export処理では、保存クエリ、VBA、マクロ、DDL、DML、リンク先の実データ取得を実行しません。DAOメタデータ内のリンク接続情報は安全なキーだけを残してマスクします。SaveAsText原本は変更せず、secret-scanも無効化しません。接続情報候補を検出した場合、既定は`FAIL`です。既知の接続文字列生成コードを含むDBは、明示的な`RestrictedLocal`ポリシーで検出結果を記録し、ほかのエラーがない場合だけ`PASS_RESTRICTED`にできます。この出力はローカル隔離限定です。
 
 リンクテーブルの`TableDef.Fields`や`Indexes`は、AccessやODBCドライバーによって接続先のスキーマ確認を行う場合があります。接続自体を禁止する検証では、ネットワークを観測または遮断できる環境で実行し、取得できなかった項目を未検証として記録します。接続待ちやタイムアウト時に、同じプロパティ参照を繰り返しません。
 
@@ -377,6 +378,7 @@ Name AutoCorrectの設定状態は事前調査で記録しますが、標準手�
     saveastext/
   manifest.json
   manifest.csv
+  sensitive-findings.json
   export-summary.json
   export-errors.json
   export.log
@@ -386,18 +388,20 @@ Name AutoCorrectの設定状態は事前調査で記録しますが、標準手�
 
 ### 4.5 Exportの合格条件
 
-次がすべて成立したときだけ`PASS`とします。
+次がすべて成立したときだけ`PASS`、または隔離限定の`PASS_RESTRICTED`とします。
 
 - 凍結baselineの操作前後SHA-256が一致する。Accessで開いた二次コピーのハッシュとは混同しない。
 - 発見したオブジェクト件数と出力件数が一致する。
 - 必須カテゴリが省略されていない。
-- `export-summary.json`の`status`が`PASS`である。
+- `export-summary.json`の`status`が`PASS`または`PASS_RESTRICTED`である。
 - `export-errors.json`が空配列である。
-- manifest記載ファイルが存在し、空ではない。
+- manifest記載ファイルが存在し、空Moduleとして`content_state=empty`を記録したもの以外は空ではない。
 - manifestのSHA-256が実ファイルと一致する。
 - UTF-8派生物に変換失敗、文字化け兆候、想定外NULがない。
-- SaveAsText内の接続資格情報・接続先候補スキャンが0件である。検出値そのものをログへ書かない。
-- 出力、ログ、申し送りに接続文字列、資格情報、実サーバ名が残っていない。
+- `PASS`ではSaveAsText内の接続資格情報・接続先候補スキャンが0件である。検出値そのものをログへ書かない。
+- `PASS_RESTRICTED`ではポリシー、確認スイッチ、`disclosure_status=RESTRICTED`、検出件数、sensitive findingsのSHA-256が記録され、出力が隔離stage内にある。
+- `PASS`では出力、ログ、申し送りに接続文字列、資格情報、実サーバ名が残っていない。
+- `PASS_RESTRICTED`では接続情報を含み得る全出力が隔離stage内にあり、stage外のログ、申し送り、公開物、AIへの依頼に接続文字列、資格情報、実サーバ名が残っていない。
 - 通常の起動処理が走っていない。
 - 新しいAccess PIDと`.laccdb`が残っていない。
 
