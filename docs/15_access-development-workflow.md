@@ -29,7 +29,7 @@
 5. 自動起動がなく、無効化が不要なら`not-required`と記録する。
 6. 完全一致の`SKIP_AUTOEXEC`分岐が既にあれば、重複追加しない。
 7. 分岐がなければ、Shift-bypassで開いた作業コピーの起動関数へ一度だけ追加する。
-8. 通常起動と`/cmd SKIP_AUTOEXEC`起動を別々に検証する。
+8. 通常起動を許す前に検証用接続先の同一性と到達性を確認し、通常起動と`/cmd SKIP_AUTOEXEC`起動を別々に検証する。
 9. 合格した自動起動無効化対応版を開発baselineとして凍結する。
 
 ```vb
@@ -83,7 +83,7 @@ COMの`OpenCurrentDatabase`へ`/cmd`は渡せません。`AutomationSecurity`だ
 
 - 必須ヒアリングが未完了
 - 自動起動または無効化方法が未確認
-- `AllowBypassKey=False`（解析はDAOまたは空DB、修正は依頼元確認後の承認済み経路へ切替）
+- `AllowBypassKey=False`（解析はDAO、[disabled mode](requirements/01_startup-bypass.md)または空DB、修正は依頼元確認後の承認済み経路へ切替）
 - モーダルダイアログまたはCOMタイムアウト
 - 原本やbaselineのSHA-256が途中で変化
 - 予定外の資産差分、コンパイルエラー、残留Access PID・ロック

@@ -120,6 +120,12 @@ Accessシステムのテスト環境では、次の流れが単純です。
 3. Accessのリンクテーブルを `localhost,<port>` または別名ホストの `server,<port>` に張り直す。
 4. プロジェクトごとに、コンテナ名・ポート番号・volume名を分ける。
 
+## SQL Server列幅を転記するときの単位
+
+SQL Serverのスキーマ値をAccessやWeb化設計へ転記するときは、値だけでなく単位と取得元も記録します。`sys.columns.max_length`は文字数ではなくバイト数で、`nvarchar(max)`などのlarge value型は`-1`です。たとえば`nvarchar(64)`の`max_length`は`128`になるため、そのまま`nvarchar(128)`と転記しません。
+
+文字型の宣言上の長さが必要なら、`COLUMNPROPERTY(object_id, column_name, 'Precision')`など、目的に合うメタデータを併用して元DDLと照合します。出力列名にも`max_length_bytes`、`declared_character_length`のように単位を含めます。
+
 ## 今回の構築例
 
 実際に作った構成例です。
@@ -211,3 +217,5 @@ open //./pipe/dockerDesktopLinuxEngine: Access is denied.
 ## 参考
 
 - Microsoft Learn: [Quickstart: Run SQL Server Linux container images with Docker](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker)
+- Microsoft Learn: [sys.columns](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-columns-transact-sql)
+- Microsoft Learn: [COLUMNPROPERTY](https://learn.microsoft.com/en-us/sql/t-sql/functions/columnproperty-transact-sql)

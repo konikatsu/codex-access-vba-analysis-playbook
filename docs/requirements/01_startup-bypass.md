@@ -9,7 +9,7 @@ Access DBを開いた瞬間にAutoExecマクロ、起動フォーム、初期処
 解析・修正作業では、まず起動処理の有無と経路を安全に調べます。その後、必要なDBだけに保守用の早期終了分岐を一度だけ追加します。
 
 起動処理を止める前に、Access画面上部のセキュリティ警告も確認します。
-「コンテンツの有効化」をクリックしていないと、VBAやフォームイベントが止まり、DB破損のように見えるエラーが出ることがあります。
+開発baselineや動作試験では、「コンテンツの有効化」をクリックしていないとVBAやフォームイベントが止まり、DB破損のように見えるエラーが出ることがあります。一方、非信頼場所での静的救出ではコンテンツを有効化しません。目的を混同しないでください。
 
 詳しくは [コンテンツの有効化を確認する](00_enable-active-content.md) を参照してください。
 
@@ -81,6 +81,14 @@ GUI作業では、Shiftキーを押しながらDBを開く方法も使えます�
 
 入力待機まで到達したことは、起動処理が抑止された完全な証明ではありません。対象DBのフォーム数、起動ログ、副作用の不在を別途確認します。`AllowBypassKey=False`の場合は使用しません。
 
+## 例外: disabled modeによる静的救出
+
+Trusted Locationではactive contentが有効になるため、`AutomationSecurity=3`だけを起動抑止の証拠にしません。Shift-bypassが使えずDAOでは情報が足りない場合、検証済みの非信頼フォルダに使い捨てコピーを置き、disabled modeで静的に調べる方法を例外候補にできます。
+
+この方法も、場所を移すだけで全起動処理が止まる保証はありません。同じ環境の安全なカナリアでactive contentが無効になることを確認し、コンテンツを有効化せず、`AutomationSecurity=3`、専用PID、ウォッチドッグ、対象固有の起動証跡を併用します。読み取りと静的Exportだけに限定し、開発baseline、編集、正式コンパイル、自己テストには使いません。証明できない場合は[空DBインポート方式](07_empty-database-recovery-import.md)へ切り替えます。
+
+現行の[外部Exportツール](../16_access-external-export.md)はShift-bypass前提で、`AllowBypassKey=False`を拒否します。disabled modeへの自動切替は未実装です。
+
 ## COM経路: 仮想Shift + AutomationSecurity
 
 COMの`OpenCurrentDatabase`には`/cmd`を直接渡せません。作業コピーを仮想Shiftで起動バイパスし、目的に応じた`AutomationSecurity`を`OpenCurrentDatabase`より前に設定します。
@@ -98,7 +106,12 @@ $access.OpenCurrentDatabase($dbPath)
 
 - `AutomationSecurity = 3`だけでは、起動フォームや信頼済みDBの全初期処理を止める保証になりません。
 - `SaveAsText`などの静的操作は`3`、正式コンパイルや`Application.Run`は`1`を使います。
-- 仮想Shiftを使えない場合、構造メタデータだけならDAO読み取り専用経路へ切り替えます。
+- 仮想Shiftを使えない場合、構造メタデータだけならDAO、静的Exportが必要なら検証済みdisabled modeまたは空DB方式へ切り替えます。
 - PID、仮想Shift、タイムアウト、後片付けを一組にします。
 
 詳細は[Access修正の標準開発手順](../15_access-development-workflow.md)を参照してください。
+
+参考:
+
+- [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
+- [Trusted Locations for Office files](https://learn.microsoft.com/en-us/microsoft-365-apps/security/trusted-locations)

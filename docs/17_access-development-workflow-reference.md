@@ -190,11 +190,23 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 `Application.Forms.Count=0`は確認項目の一つですが、それだけで起動処理が何も実行されなかったとは断定しません。フォームを開かない初期処理もあるため、段階ログや起動処理固有の証跡も確認します。
 
+ログや副作用が無いという否定的証拠だけで抑止成功と判定しません。外部接続より前に必ずマーカーを残す安全なカナリアDB、または承認済みの使い捨て検証コピーで肯定対照を取り、その証跡が確認対象では存在しないことを確認します。対照取得だけを目的に、本体や到達先不明の起動処理を実行しません。
+
 `hWndAccessApp`からPIDを記録できなかった場合は、起動前の`MSACCESS.EXE`スナップショットと`Win32_Process`を使います。停止候補は「起動前に存在しない」「起動操作の時間窓内に生成」「実行ファイルが期待する`MSACCESS.EXE`」「コマンドラインに独立した引数`-Embedding`がある」をすべて満たすものに限定します。候補が一意でなければ停止しません。`MainWindowHandle=0`、プロセス名だけ、親子関係だけでは識別しません。
 
 タイムアウトや強制停止を経験した作業コピーは`failed`扱いにし、以後の候補へ昇格させません。`.laccdb`または`.ldb`は対象PIDの消滅を確認した後だけ片付けます。停止候補を一意に識別できない場合は停止せず、前提が回復するまでそのstageを中断します。
 
-`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAOまたは空DB方式へ切り替えます。起動関数へIF分を追加する必要がある場合は、起動依存先を使い捨て検証環境へ向けた承認済み保守コピーなど、安全に通常起動できる経路を先に用意します。安全な初回編集経路がない状態で本体を開きません。
+`AllowBypassKey=False`の場合はShift-bypassを強行しません。解析だけならDAO、次節のdisabled mode、または空DB方式へ切り替えます。起動関数へIF分を追加する必要がある場合は、起動依存先を使い捨て検証環境へ向けた承認済み保守コピーなど、安全に通常起動できる経路を先に用意します。安全な初回編集経路がない状態で本体を開きません。
+
+### 2.5 disabled modeによる静的救出
+
+Trusted Locationでは、マクロ、外部データ接続などのactive contentが有効になります。そのため、Trusted Location上のDBを`AutomationSecurity=3`だけで安全に開けるとは判断しません。
+
+Shift-bypassが使えずDAOだけでは不足する場合、検証済みの非信頼フォルダへ使い捨てコピーを置き、disabled modeで静的に調査する方法を例外候補にできます。ただし、場所を移しただけで全AutoExecアクションや起動設定が止まる保証はありません。事前に同じ環境のカナリアでactive contentが無効になることを確認し、`AutomationSecurity=3`、専用PID、ウォッチドッグを併用して、コンテンツを有効化せず、対象固有の起動証跡と副作用も確認します。
+
+この経路は読み取りと静的Export専用です。開発baseline、正式コンパイル、編集、自己テストには使いません。抑止を証明できない場合は[空DBインポート方式](requirements/07_empty-database-recovery-import.md)へ切り替えます。
+
+現行の[外部Exportツール](16_access-external-export.md)はShift-bypass前提で、`AllowBypassKey=False`を起動前に拒否します。disabled modeへの自動切替は実装していないため、同ツールで代替できると仮定しません。
 
 ## 3. baselineの再利用判定
 
@@ -250,7 +262,7 @@ session_sequence
 2. 新しいstageへACCDBと対応INIをコピーする。
 3. コピー元ACCDBの操作前SHA-256を記録する。
 4. コピー直後に、コピー元と作業コピーのSHA-256が一致することを確認する。
-5. INIの接続先が、作業記録に記載した検証環境と一致することを確認する。
+5. 通常起動、自己テスト、GUI試験を許す場合は、INIの接続先が承認済みの使い捨て検証環境と一致し、同じプロトコル・ドライバーによる時間制限付きの読み取り確認で到達できることを確かめる。静的な起動抑止作業だけなら、停止中の依存先を起動条件にしない。
 6. 無関係な`MSACCESS.EXE`と残留`.laccdb`がないことを確認する。
 
 例:
@@ -376,12 +388,21 @@ Name AutoCorrectの設定状態は事前調査で記録しますが、標準手�
 3. before、after、unified diff、変更理由を保存する。
 4. 文字コード、CRCRLF、過剰空行、想定外NUL、孤立した`()`を検査する。
 5. セルフレビューを完了する。
-6. 仕様、変更ソース、diff、テスト観点、セルフレビュー結果を独立レビューへ渡す。
+6. 次の必須材料、テスト観点、セルフレビュー結果を独立レビューへ渡す。必須材料が欠けた状態では依頼しない。
 7. 指摘を採用、棄却、要検証に分類し、根拠をstage記録へ残す。
 8. 採用分を直し、影響範囲を再列挙してセルフレビューをやり直す。
 9. 重大な未解決指摘がなく、要検証項目の扱いが決まるまでAccessへ反映しない。
 
 レビュー前の不要なAccess起動と、途中候補の全資産Exportを避けます。
+
+独立レビューの必須材料:
+
+1. 前後の文脈と行番号を含むunified diff
+2. 変更箇所の呼出元と依存先
+3. 既存の早期終了、型宣言、入力検証などのガード
+4. 仕様、および意図的に対象外とした事項と理由
+
+該当しない材料は`該当なし`と理由を明記します。項目そのものを省略しません。
 
 ### 5.1 セルフレビュー
 
@@ -443,7 +464,7 @@ Name AutoCorrectの設定状態は事前調査で記録しますが、標準手�
 7. `native`同士を比較し、意図した変更以外がないことを確認する。
 8. 最終diffをセルフレビューし、独立レビュー指摘の採用・棄却・要検証と対応が一致することを確認する。
 
-baselineと候補はいずれも「実装/基準作成セッションでコンパイル、閉じる、再オープンしてコンパイル、閉じる、外部ツールが二次コピーをExport」の順に揃えます。Accessによる既知の再シリアライズ差分と、業務上の変更を分けます。許容差分は案件ごとに明示し、見慣れた差分だからという理由だけで無条件に除外しません。
+baselineと候補はいずれも「実装/基準作成セッションでコンパイル、閉じる、再オープンしてコンパイル、閉じる、外部ツールが二次コピーをExport」の順に揃えます。Accessによる既知の再シリアライズ差分と、業務上の変更を分けます。識別子の大文字小文字だけの差分も一律許容せず、新しい宣言や命名を揃えて解消できるか確認します。許容差分は案件ごとに明示し、見慣れた差分だからという理由だけで無条件に除外しません。
 
 ## 8. 自己テスト
 
@@ -552,8 +573,9 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 | ACCDBハッシュと環境が既存baselineと一致 | baseline作成とbefore Exportを省略 |
 | テーブル・クエリなどの構造情報だけが必要 | DAO読み取り専用経路を使い、Accessを起動しない |
 | COM openがタイムアウト | 同じ呼出しを繰り返さず、PIDと段階ログを確認 |
+| `RPC_E_DISCONNECTED` / `0x800706BE` | Access障害と断定せず、モーダル、段階ログ、INI接続先の同一性・到達性を確認 |
 | exeやCOM DLLが見つからないように見える | 環境フィンガープリントと展開済みレジストリ値を確認し、完全環境と比較 |
-| `AllowBypassKey=False` | Shiftを強行しない。解析はDAOまたは空DB方式、修正は依頼元確認後の承認済み経路へ切替 |
+| `AllowBypassKey=False` | Shiftを強行しない。解析はDAO、検証済みdisabled mode、または空DB方式、修正は依頼元確認後の承認済み経路へ切替 |
 | 固定`/cmd`未対応DBをGUI/VBEで開く | Shift-bypassを使う。`AllowBypassKey=False`なら空DB方式または承認済みコピーへ切替 |
 | 解析だけ必要で直接開けない | [空DBインポート方式](requirements/07_empty-database-recovery-import.md)を使用し、作業コピーからAutoExecを除外して選択インポート |
 | 空DB方式で解析できた | 構造理解には使用可、正式差分基準には使用不可 |
@@ -577,6 +599,8 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [Workspace.OpenDatabase method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-opendatabase-method-dao)
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
+- [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
+- [Trusted Locations for Office files](https://learn.microsoft.com/en-us/microsoft-365-apps/security/trusted-locations)
 - [Set name AutoCorrect options](https://support.microsoft.com/en-us/access/set-name-autocorrect-options)
 - [Command-line switches for Microsoft Office products](https://support.microsoft.com/en-us/office/lifecycle/command-line-switches-for-microsoft-office-products)
 - [Win32_Process class](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process)
