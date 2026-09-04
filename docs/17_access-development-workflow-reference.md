@@ -153,7 +153,7 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 原本ACCDB、対応INI、起動経路、対象操作が前回記録と一致し、保存済み棚卸しのSHA-256も一致する場合は、baselineの棚卸しを再利用できます。変更後の候補で再利用するには、最終unified diffと依存先の再列挙により、この節で列挙した接続生成箇所と、それらへ到達する制御条件に追加・変更がないことも必要です。接続元、接続先、到達条件へ影響する変更があれば、候補を対象に棚卸しをやり直します。再利用時も、資格情報を含まない接続先allowlistのSHA-256と検証用接続先の到達性は実行前に再確認します。
 
-INI差替えだけで安全と判断できるのは、対象操作から到達する全接続がそのINIから生成されると確認できた場合だけです。既存のUser DSN、System DSN、File DSNは、ほかのアプリや利用者へ影響し得るため書き換えません。必要なら明示承認した使い捨て保守コピーだけで、専用の検証用DSNまたは対応ドライバーが許すDSN-less接続へ置き換えます。DSNを使う場合は、その名前だけをallowlistと比べず、実行プロセスと同じ32bit・64bit側のDSN定義から接続先識別子を読み取って照合します。
+INI差替えだけで安全と判断できるのは、対象操作から到達する全接続がそのINIから生成されると確認できた場合だけです。既存のUser DSN、System DSN、File DSNは、ほかのアプリや利用者へ影響し得るため書き換えません。必要なら明示承認した使い捨て保守コピーだけで、専用の検証用DSNまたは対応ドライバーが許すDSN-less接続へ置き換えます。DSNを使う場合は、その名前だけをallowlistと比べず、接続を行うAccess（Office）と同じ32bit・64bit側のDSN定義から接続先識別子を読み取って照合します。64bit Windowsでは、System DSNの64bit側`HKLM\SOFTWARE\ODBC\Odbc.ini`と32bit側`HKLM\SOFTWARE\WOW6432Node\ODBC\Odbc.ini`、User DSNの64bit側`HKCU\SOFTWARE\ODBC\Odbc.ini`と32bit側`HKCU\SOFTWARE\WOW6432Node\ODBC\Odbc.ini`を区別します。調査に使うPowerShellのbitnessではなく、Accessのbitnessを基準にします。
 
 リンクテーブルの`TableDef.Connect`を変更する場合は、接続文字列から資格情報を除いて解析した接続先識別子が独立したallowlistと完全一致することを確認し、専用プロセスと時間制限の下で`RefreshLink`を呼びます。`RefreshLink`は外部通信を伴い得るため、意図しない接続先への通信を遮断または監視できない環境では実行しません。処理後はDAOを閉じ、再オープンして永続化された`Connect`を再読します。再読した値も事前確認と同じ方法で接続先識別子へ正規化し、allowlistと完全一致することを確認します。`QueryDef.Connect`、保存SQL、VBAなどを変更した場合も、閉じて再オープンしたコピーから値を再取得します。変更、再接続、再読、再照合のいずれかが失敗したコピーは`failed`とし、通常起動しません。現行の共通ツールは、この書換えと`RefreshLink`を実装していません。
 
@@ -252,6 +252,9 @@ manifest_sha256
 startup_probe_sha256
 startup_connection_inventory_sha256
 test_target_allowlist_sha256
+selftest_dispatcher_sha256
+selftest_negative_test_status
+selftest_negative_test_evidence_sha256
 startup_bypass_status
 startup_bypass_diff_sha256
 created_at
@@ -422,7 +425,7 @@ Name AutoCorrectの設定状態は事前調査で記録しますが、標準手�
 
 - 要求、変更理由、before/after、diffが一致している。
 - 対象オブジェクトと依存先を再列挙し、変更範囲の漏れがない。
-- [外部接続棚卸し](#231-通常起動前の外部接続棚卸し)で列挙した接続生成箇所と、それらへ到達する制御条件について、追加・変更の有無を記録し、影響があれば候補の棚卸しをやり直している。
+- [外部接続棚卸し](#231-通常起動前の外部接続棚卸し)で列挙した接続生成箇所と、それらへ到達する制御条件について、追加・変更の有無と影響を判定して記録している。影響がある場合の再実施は、[自己テスト](#8-自己テスト)で複製後の候補に対して行う。
 - 予定したファイルとオブジェクトだけが変わり、置換件数が期待値と一致する。
 - 確認済み事実、推定、要実機確認を分け、断定に対応する証拠がある。
 - 文字コード、改行、BOM、NUL、過剰空行を検査済みである。
@@ -547,13 +550,15 @@ allowlistはUTF-8 JSONとし、使用する種類だけを残します。次は�
 }
 ```
 
-DB側ディスパッチャーは、環境変数やJSONが空、不正、重複、不明な種類、必須項目不足、ワイルドカードを含む場合に接続前に`FAIL`とします。INI、`Connect`、保存SQLなどから接続先を接続せずに導出し、案件で定義した正規化後の`kind`と接続先項目を完全一致で比較します。部分一致やDSN名だけの一致を認めません。不一致なら結果JSONへ`target_allowlist_match=false`を記録してAccessを閉じ、外部接続を開きません。
+DB側ディスパッチャーは、環境変数やJSONが空、不正、重複、不明な種類、想定外の`schema_version`、必須項目不足、ワイルドカードを含む場合に接続前に`FAIL`とします。INI、`Connect`、保存SQLなどから接続先を接続せずに導出し、案件で定義した正規化後の`kind`と接続先項目を完全一致で比較します。正規化では、プロトコル、ホスト、インスタンス名、ポート、データベース名を脱落させません。大文字小文字などを同一視するのは、使用するドライバーと接続先が同一と定義する項目だけに限定します。`host\instance`と`host,port`、DNS名と解決後IP、UNCとドライブ文字は、同一性を別途証明して明示的な対応表に固定しない限り同一視しません。ファイルは絶対パスへ変換し、相対パスを受け付けません。部分一致やDSN名だけの一致を認めません。不一致なら結果JSONへ`target_allowlist_match=false`を記録してAccessを閉じ、外部接続を開きません。
 
-`target_allowlist_match=true`はDB側の自己申告なので、それだけを接続前照合の証明にしません。ディスパッチャーのコードレビューに加え、意図的に一致しないallowlistを使う否定試験で、外部通信が発生せず`FAIL`になることを確認します。実値を入れたallowlistは隔離stage内だけに保存し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。
+`target_allowlist_match=true`はDB側の自己申告なので、それだけを接続前照合の証明にしません。ディスパッチャーのコードレビューに加え、検証専用コピーで、空または不正JSONのallowlistと、形式は正しいが接続先が一致しないallowlistの2通りを否定試験します。どちらも外部接続を開く前に`FAIL`となることを確認します。
 
-`RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`はこの契約に従います。INIが指す値をそのままallowlistへ複製せず、本番、共有DB、接続先不明では接続を開く前に拒否します。
+外部接続の不在は結果JSONだけでは証明できません。サーバー接続では、検証コピーの接続先を制御下のローカルcanaryへ向けて接続受付件数が0であることを記録するか、AccessのPID、実行時間窓、全候補接続先で絞ったホスト側通信トレースに接続試行がないことを記録します。ファイル接続では、検証専用のcanaryパスを使い、同じPIDと時間窓で絞ったOS側ファイルアクセス記録にopen試行がないことを確認します。観測手段は、別の制御用アクセスを検出できることを先に確認します。サーバー側のログイン監査だけ、タイムアウトまでの長さだけ、結果JSONが`FAIL`であることだけでは、外部接続不在の証拠にしません。実値を入れたallowlistと観測証跡は隔離stage内だけに保存し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。
 
-結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match=true`を入れます。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、接続先の一致を証明できない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
+`RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`を持つ対象DBごとに、この契約へ従うディスパッチャーを実装します。このリポジトリにはDB側ディスパッチャーの参照実装はありません。INIが指す値をそのままallowlistへ複製せず、本番、共有DB、接続先不明では接続を開く前に拒否します。
+
+結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match`の真偽値を入れます。allowlistの形式検査または照合で早期`FAIL`にする場合も、これらのキーをすべて書き、未実行の件数は0、`target_allowlist_match=false`とします。診断用の固定エラーコードも併記します。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、`target_allowlist_match`が`true`でない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
 
 試験データには一意なマーカーを付け、終了後に別の読み取り確認で0件になったことを検証します。マーカー0件だけではテスト自体が走った証拠になりません。直接SQL接続の成功だけで、Accessが正しいINIを読んだとも判断しません。
 
@@ -586,6 +591,7 @@ DB側ディスパッチャーは、環境変数やJSONが空、不正、重複�
 - compileとreopen compileの結果
 - baselineと候補のmanifest
 - 候補diffの外部接続影響判定と、棚卸しを再利用または再実施した根拠
+- DB側ディスパッチャーのSHA-256、2通りの否定試験結果、外部接続不在の観測方法と証跡のSHA-256
 - 自己テスト、GUI、帳票、PDFの証跡
 - 既知の未検証項目
 - `AllowBypassKey`を一時変更した場合の元値、承認者、承認日時、復元確認
@@ -654,6 +660,8 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [QueryDef.Connect property (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/querydef-connect-property-dao)
 - [IN clause (Microsoft Access SQL)](https://learn.microsoft.com/en-us/office/vba/access/concepts/miscellaneous/in-clause-microsoft-access-sql)
 - [Managing Data Sources (ODBC)](https://learn.microsoft.com/en-us/sql/odbc/admin/managing-data-sources?view=sql-server-ver17)
+- [Registry Entries for Data Sources (ODBC)](https://learn.microsoft.com/en-us/sql/odbc/reference/install/registry-entries-for-data-sources?view=sql-server-ver17)
+- [ODBC driver installation check](https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/install/windows/odbc-driver-install-checking)
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
 - [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
