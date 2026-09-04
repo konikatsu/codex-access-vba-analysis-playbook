@@ -211,6 +211,8 @@ baseline作成を毎回繰り返してはいけません。次がすべて一致
 - 前回のコンパイル、再オープン、Export検証結果
 - baselineと候補へ適用するコンパイル・Exportのセッション列
 
+ACCDBのSHA-256は、閉じて凍結したファイルのバイト同一性を確認する識別子です。Accessで開いた作業コピーや二次コピーは内部状態が変わり得るため、凍結baselineとの同一性判定には使いません。Export manifestと各資産のSHA-256は内容差分の証跡として併用し、ACCDBのSHA-256を置き換えません。
+
 ACCDB、INI、Access、参照設定、エクスポータのいずれかが変わった場合はbaselineを作り直します。由来が説明できない既存コピーは再利用しません。
 
 baseline記録には、最低限次を残します。
@@ -323,6 +325,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 Export処理では、保存クエリ、VBA、マクロ、DDL、DML、リンク先の実データ取得を実行しません。DAOメタデータ内のリンク接続情報は安全なキーだけを残してマスクします。SaveAsText原本は変更せず、接続情報候補を検出した場合は全体をFAILにします。
 
 リンクテーブルの`TableDef.Fields`や`Indexes`は、AccessやODBCドライバーによって接続先のスキーマ確認を行う場合があります。接続自体を禁止する検証では、ネットワークを観測または遮断できる環境で実行し、取得できなかった項目を未検証として記録します。接続待ちやタイムアウト時に、同じプロパティ参照を繰り返しません。
+
+Name AutoCorrectの設定状態は事前調査で記録しますが、標準手順が自動でOFFへ変更することはしません。設定変更は名前マップの作成・削除やオブジェクトの開閉を伴い、対象DB自体を変えるためです。変更が必要な場合は承認済み作業コピーだけで行い、その差分も監査対象にします。リンクテーブルのローカル化や`Connect`書換えもbaselineには行わず、必要なら由来と対応表を記録した検証専用コピーとして分離します。
 
 出力構成:
 
@@ -553,6 +557,7 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 | 空DB方式で解析できた | 構造理解には使用可、正式差分基準には使用不可 |
 | 自動起動無効化分岐を安全に追加できない | 標準作業を中断し、依存先を使い捨て環境へ向けた承認済み保守コピー等を用意 |
 | `AutomationSecurity=3`でコンパイルが通った | 正式合格にせず、`1`で再確認 |
+| VBA破損を疑い`/decompile`を検討 | Microsoftの公開スイッチ一覧にないため定常工程へ入れない。症状がある場合だけ、承認済み使い捨てコピーで前後差分を記録して検証 |
 | 失敗コピーができた | 成功baselineから新しい候補を作成 |
 | 独立レビューの指摘に根拠がない | 無条件採用せず要検証とし、公式仕様または再現試験で確認 |
 
@@ -570,5 +575,7 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [Workspace.OpenDatabase method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-opendatabase-method-dao)
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
+- [Set name AutoCorrect options](https://support.microsoft.com/en-us/access/set-name-autocorrect-options)
+- [Command-line switches for Microsoft Office products](https://support.microsoft.com/en-us/office/lifecycle/command-line-switches-for-microsoft-office-products)
 - [Win32_Process class](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process)
 - [Registry value types](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types)
