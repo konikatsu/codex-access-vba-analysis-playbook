@@ -153,7 +153,7 @@ DAOを閉じた後は、作業コピー横の`.laccdb`または`.ldb`が消え�
 
 原本ACCDB、対応INI、起動経路、対象操作が前回記録と一致し、保存済み棚卸しのSHA-256も一致する場合は、baselineの棚卸しを再利用できます。変更後の候補で再利用するには、最終unified diffと依存先の再列挙により、この節で列挙した接続生成箇所と、それらへ到達する制御条件に追加・変更がないことも必要です。接続元、接続先、到達条件へ影響する変更があれば、候補を対象に棚卸しをやり直します。再利用時も、資格情報を含まない接続先allowlistのSHA-256と検証用接続先の到達性は実行前に再確認します。
 
-INI差替えだけで安全と判断できるのは、対象操作から到達する全接続がそのINIから生成されると確認できた場合だけです。既存のUser DSN、System DSN、File DSNは、ほかのアプリや利用者へ影響し得るため書き換えません。必要なら明示承認した使い捨て保守コピーだけで、専用の検証用DSNまたは対応ドライバーが許すDSN-less接続へ置き換えます。DSNを使う場合は、その名前だけをallowlistと比べず、接続を行うAccess（Office）と同じ32bit・64bit側のDSN定義から接続先識別子を読み取って照合します。64bit Windowsでは、System DSNの64bit側`HKLM\SOFTWARE\ODBC\Odbc.ini`と32bit側`HKLM\SOFTWARE\WOW6432Node\ODBC\Odbc.ini`、User DSNの64bit側`HKCU\SOFTWARE\ODBC\Odbc.ini`と32bit側`HKCU\SOFTWARE\WOW6432Node\ODBC\Odbc.ini`を区別します。調査に使うPowerShellのbitnessではなく、Accessのbitnessを基準にします。
+INI差替えだけで安全と判断できるのは、対象操作から到達する全接続がそのINIから生成されると確認できた場合だけです。既存のUser DSN、System DSN、File DSNは、ほかのアプリや利用者へ影響し得るため書き換えません。必要なら明示承認した使い捨て保守コピーだけで、専用の検証用DSNまたは対応ドライバーが許すDSN-less接続へ置き換えます。DSNを使う場合は、その名前だけをallowlistと比べず、接続を行うAccess（Office）のbitnessで利用できるドライバーとDSN定義から接続先識別子を読み取って照合します。64bit WindowsのSystem DSNは、64bit側`HKLM\SOFTWARE\ODBC\Odbc.ini`と32bit側`HKLM\SOFTWARE\WOW6432Node\ODBC\Odbc.ini`に分かれます。User DSNは`HKCU\SOFTWARE\ODBC\Odbc.ini`で32bit・64bitに共有されますが、Accessと同じbitnessのドライバーがなければ接続には使えません。調査に使うPowerShellのbitnessを基準にせず、User DSNを`HKCU\SOFTWARE\WOW6432Node`から探しません。
 
 リンクテーブルの`TableDef.Connect`を変更する場合は、接続文字列から資格情報を除いて解析した接続先識別子が独立したallowlistと完全一致することを確認し、専用プロセスと時間制限の下で`RefreshLink`を呼びます。`RefreshLink`は外部通信を伴い得るため、意図しない接続先への通信を遮断または監視できない環境では実行しません。処理後はDAOを閉じ、再オープンして永続化された`Connect`を再読します。再読した値も事前確認と同じ方法で接続先識別子へ正規化し、allowlistと完全一致することを確認します。`QueryDef.Connect`、保存SQL、VBAなどを変更した場合も、閉じて再オープンしたコピーから値を再取得します。変更、再接続、再読、再照合のいずれかが失敗したコピーは`failed`とし、通常起動しません。現行の共通ツールは、この書換えと`RefreshLink`を実装していません。
 
@@ -221,7 +221,7 @@ baseline作成を毎回繰り返してはいけません。次がすべて一致
 - 元ファイルのSHA-256と自動起動経路
 - `SKIP_AUTOEXEC`分岐の状態と検証済みdiff
 - 対応INIのSHA-256
-- Microsoft Accessのバージョンとビルド
+- Microsoft Accessのバージョン、ビルド、bitness
 - エクスポータのバージョンまたはSHA-256
 - 参照設定
 - Export manifestのSHA-256
@@ -247,12 +247,19 @@ baseline_path
 baseline_sha256
 ini_sha256
 access_version
+access_bitness
 exporter_sha256
 manifest_sha256
 startup_probe_sha256
 startup_connection_inventory_sha256
 test_target_allowlist_sha256
-selftest_dispatcher_sha256
+selftest_wrapper_sha256
+selftest_dispatcher_export_manifest_sha256
+selftest_allowlist_schema_version
+selftest_driver_inventory_sha256
+selftest_observer_config_sha256
+selftest_negative_invalid_allowlist_sha256
+selftest_negative_mismatch_allowlist_sha256
 selftest_negative_test_status
 selftest_negative_test_evidence_sha256
 startup_bypass_status
@@ -554,11 +561,15 @@ DB側ディスパッチャーは、環境変数やJSONが空、不正、重複�
 
 `target_allowlist_match=true`はDB側の自己申告なので、それだけを接続前照合の証明にしません。ディスパッチャーのコードレビューに加え、検証専用コピーで、空または不正JSONのallowlistと、形式は正しいが接続先が一致しないallowlistの2通りを否定試験します。どちらも外部接続を開く前に`FAIL`となることを確認します。
 
-外部接続の不在は結果JSONだけでは証明できません。サーバー接続では、検証コピーの接続先を制御下のローカルcanaryへ向けて接続受付件数が0であることを記録するか、AccessのPID、実行時間窓、全候補接続先で絞ったホスト側通信トレースに接続試行がないことを記録します。ファイル接続では、検証専用のcanaryパスを使い、同じPIDと時間窓で絞ったOS側ファイルアクセス記録にopen試行がないことを確認します。観測手段は、別の制御用アクセスを検出できることを先に確認します。サーバー側のログイン監査だけ、タイムアウトまでの長さだけ、結果JSONが`FAIL`であることだけでは、外部接続不在の証拠にしません。実値を入れたallowlistと観測証跡は隔離stage内だけに保存し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。
+否定試験の記録には、正規allowlistとは別に2通りの否定試験用allowlistのSHA-256を残します。`selftest_dispatcher_export_manifest_sha256`は、AutoExec、起動関数、自己テストディスパッチャー、および照合に使うヘルパーをSaveAsTextした各ファイルの相対パスとSHA-256を列挙するmanifestのSHA-256です。前回の否定試験を再利用できるのは、そのmanifest、ラッパー、allowlistのschemaと正規化規則、対象操作の接続生成経路、Accessのバージョンとbitness、使用ドライバー、および観測方法がすべて一致し、2通りの入力と証跡のSHA-256を再確認できる場合だけです。どれかが変わるか証明できなければ、否定試験をやり直します。
+
+外部接続の不在は結果JSONだけでは証明できません。INIなどから実行時に接続文字列を組み立て、`RefreshLink`なしで検証先を差し替えられる経路では、制御下のローカルcanaryへ向けて接続受付件数が0であることを記録できます。保存済みODBCリンクテーブルやパススルークエリの経路では、否定試験のためだけに`Connect`を書き換えたり`RefreshLink`したりせず、AccessのPIDと実行時間窓だけで絞ったホスト側通信トレースにより、その時間窓の外向き接続試行をすべて列挙し、0件であることを記録します。取得前に宛先フィルターをかけません。canaryはTCPの接続受付をログイン処理より前から数えますが、サーバー側のログイン監査はログイン処理へ到達しなかった試行を取りこぼし得るため、単独では証拠にしません。
+
+ファイル接続では、否定試験のためだけに保存済みリンクを書き換えず、AccessのPIDと実行時間窓だけで絞ったOS側ファイルアクセス記録から全open試行を列挙します。作業ACCDB、結果JSON、allowlist、明示したローカル一時・システム依存先以外のパスが0件であることを確認し、取得前にパスフィルターをかけません。実行時に検証先を差し替えられる経路では、検証専用のcanaryパスも使用できます。観測手段は、否定試験とは別の時間窓で制御用アクセスを発生させ、検出できることを先に確認します。タイムアウトまでの長さだけ、結果JSONが`FAIL`であることだけでも、外部接続不在の証拠にしません。実値を入れたallowlistと観測証跡は隔離stage内だけに保存し、公開リポジトリ、AIへの依頼、申し送りへ転記しません。
 
 `RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`を持つ対象DBごとに、この契約へ従うディスパッチャーを実装します。このリポジトリにはDB側ディスパッチャーの参照実装はありません。INIが指す値をそのままallowlistへ複製せず、本番、共有DB、接続先不明では接続を開く前に拒否します。
 
-結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match`の真偽値を入れます。allowlistの形式検査または照合で早期`FAIL`にする場合も、これらのキーをすべて書き、未実行の件数は0、`target_allowlist_match=false`とします。診断用の固定エラーコードも併記します。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、`target_allowlist_match`が`true`でない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
+結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match`の真偽値を入れます。allowlistの形式検査または照合で早期`FAIL`にする場合も、これらのキーをすべて書き、未実行の件数は0、`target_allowlist_match=false`とします。診断用の固定エラーコードは`error_code`へ併記します。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、`target_allowlist_match`が`true`でない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
 
 試験データには一意なマーカーを付け、終了後に別の読み取り確認で0件になったことを検証します。マーカー0件だけではテスト自体が走った証拠になりません。直接SQL接続の成功だけで、Accessが正しいINIを読んだとも判断しません。
 
@@ -591,7 +602,7 @@ DB側ディスパッチャーは、環境変数やJSONが空、不正、重複�
 - compileとreopen compileの結果
 - baselineと候補のmanifest
 - 候補diffの外部接続影響判定と、棚卸しを再利用または再実施した根拠
-- DB側ディスパッチャーのSHA-256、2通りの否定試験結果、外部接続不在の観測方法と証跡のSHA-256
+- 自己テストラッパーとDB側ディスパッチャーExport manifestのSHA-256、allowlist schema、正規・否定試験用allowlistのSHA-256、Access・ドライバー・観測設定の識別子、2通りの否定試験結果、外部接続不在の観測方法と証跡のSHA-256
 - 自己テスト、GUI、帳票、PDFの証跡
 - 既知の未検証項目
 - `AllowBypassKey`を一時変更した場合の元値、承認者、承認日時、復元確認
@@ -661,7 +672,8 @@ baselineがない場合だけ、baselineのコンパイル、再オープン、�
 - [IN clause (Microsoft Access SQL)](https://learn.microsoft.com/en-us/office/vba/access/concepts/miscellaneous/in-clause-microsoft-access-sql)
 - [Managing Data Sources (ODBC)](https://learn.microsoft.com/en-us/sql/odbc/admin/managing-data-sources?view=sql-server-ver17)
 - [Registry Entries for Data Sources (ODBC)](https://learn.microsoft.com/en-us/sql/odbc/reference/install/registry-entries-for-data-sources?view=sql-server-ver17)
-- [ODBC driver installation check](https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/install/windows/odbc-driver-install-checking)
+- [ODBC Administrator tool displays both 32-bit and 64-bit user DSNs](https://learn.microsoft.com/en-us/troubleshoot/sql/connect/odbc-tool-displays-32-bit-64-bit)
+- [Registry Keys Affected by WOW64](https://learn.microsoft.com/en-us/windows/win32/winprog64/shared-registry-keys)
 - [Application.SaveAsText](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/application-save-as-text)
 - [Application.Visible property](https://learn.microsoft.com/en-us/office/vba/api/access.application.visible)
 - [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
