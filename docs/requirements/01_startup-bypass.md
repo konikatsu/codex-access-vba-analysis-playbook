@@ -61,6 +61,23 @@ End Function
 
 AutoExecマクロ自体は削除、改名、コメントアウトしません。IFを置く関数が最初の副作用より前に呼ばれることを確認します。AutoExecがその前にクエリ、フォーム、外部接続などを実行する場合、このIFだけで無効化完了とはしません。起動フォームだけで処理が始まり共通関数がない場合も、フォームイベントへ単純な`Exit Sub`を足して完了とせず、最初の共通入口を設計してから確認します。
 
+### 自動検証は対象Access自身に証跡を出させる
+
+exe直接起動後の`Marshal.GetActiveObject('Access.Application')`は、`SKIP_AUTOEXEC`の合格証明に使いません。Officeはフォーカスを失うまでROTへ登録しない場合があり、複数インスタンスでは別のAccessを返す可能性もあります。
+
+自動検証するDBでは、完全一致分岐の中から[検証用ヘルパー](../../examples/AccessPlaybookStartupBypass.bas)を呼びます。
+
+```vb
+If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Then
+    AccessPlaybookAttestStartupBypassIfRequested
+    Exit Function
+End If
+```
+
+通常の`/cmd SKIP_AUTOEXEC`では環境変数がないため、ヘルパーは何も出力せず従来どおり画面を開いたままにします。[検証ラッパー](../../examples/validate-access-startup-bypass.ps1)から起動した場合だけ、一意なrun ID、固定command、対象DB一致、開いているフォーム数、`hWndAccessApp`、PIDをローカル結果へ出し、ラッパーの確認応答後に保存せず終了します。
+
+検証は信頼済みGUI用stageの使い捨てコピーで行います。ただし分岐が失敗すれば通常起動処理が続くため、到達し得る全接続先が承認済み検証環境を指すか、失敗時にも本番・共有・不明な外部依存先へ到達できないことを別の制御試験で確認した隔離環境が必要です。結果がない、run IDが違う、対象DB不一致、フォームが開く、hWnd由来PIDが専用PIDと違う、タイムアウト、PIDまたはlockが残る場合は`FAIL`です。通常起動は、外部接続棚卸しが別途合格するまで行いません。
+
 ## 代替: Shift-bypass
 
 GUI作業では、Shiftキーを押しながらDBを開く方法も使えます。
@@ -104,3 +121,4 @@ $access.OpenCurrentDatabase($dbPath)
 
 - [Decide whether to trust a database](https://support.microsoft.com/en-us/access/decide-whether-to-trust-a-database)
 - [Trusted Locations for Office files](https://learn.microsoft.com/en-us/microsoft-365-apps/security/trusted-locations)
+- [How to use Visual C# to automate a running instance of an Office program](https://learn.microsoft.com/en-us/previous-versions/office/troubleshoot/office-developer/use-visual-c-automate-run-program-instance)

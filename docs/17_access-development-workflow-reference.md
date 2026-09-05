@@ -48,6 +48,7 @@ Access DBには、AutoExec、起動フォーム、起動イベントから直ち
 | baseline/候補の全資産Export | 元ACCDBを開かず二次コピーでバイパス | [外部Exportツール](16_access-external-export.md) |
 | COMによる個別の構造確認 | AutoExecを保持したまま起動をバイパス | 仮想Shift + `AutomationSecurity=3` |
 | COMによる正式コンパイル | AutoExecを保持したまま起動をバイパス | 仮想Shift + `AutomationSecurity=1` |
+| `/cmd`無効化分岐の自動検証 | 対象Access自身が実行ID付き証跡を出す | `validate-access-startup-bypass.ps1` |
 | 読み取り自己テスト | AutoExecを固定ディスパッチャーとして使う | `/cmd RUN_SELFTEST_READONLY` |
 | 更新系自己テスト | AutoExecを固定ディスパッチャーとして使う | `/cmd RUN_SELFTEST_DML` |
 | フォーム・VBAを含む救出解析 | AutoExecを持たない空DBを開く | [空DBへ対象資産を選択インポート](requirements/07_empty-database-recovery-import.md) |
@@ -160,6 +161,43 @@ INI差替えだけで安全と判断できるのは、対象操作から到達�
 リンクテーブルの`TableDef.Connect`を変更する場合は、接続文字列から資格情報を除いて解析した接続先識別子が独立したallowlistと完全一致することを確認し、専用プロセスと時間制限の下で`RefreshLink`を呼びます。`RefreshLink`は外部通信を伴い得るため、意図しない接続先への通信を遮断または監視できない環境では実行しません。処理後はDAOを閉じ、再オープンして永続化された`Connect`を再読します。再読した値も事前確認と同じ方法で接続先識別子へ正規化し、allowlistと完全一致することを確認します。`QueryDef.Connect`、保存SQL、VBAなどを変更した場合も、閉じて再オープンしたコピーから値を再取得します。変更、再接続、再読、再照合のいずれかが失敗したコピーは`failed`とし、通常起動しません。現行の共通ツールは、この書換えと`RefreshLink`を実装していません。
 
 接続元または接続先を確定できない場合は、通常起動、自己テスト、GUIを行いません。停止中または不明な本番依存先を、この作業のために起動しません。
+
+### 2.3.2 `SKIP_AUTOEXEC`の内部証跡
+
+exe直接起動したAccessへのROT attachは、合格条件にしません。`Marshal.GetActiveObject('Access.Application')`はROTへ登録された実行中オブジェクトを返しますが、Officeはフォーカスを失うまで登録しない場合があり、複数インスタンスでは意図しないAccessを返す可能性があります。attach失敗だけで、`Command()`不一致、モーダル、DB不良のいずれとも断定しません。
+
+自動検証では、完全一致の`SKIP_AUTOEXEC`分岐自身が、最初の業務副作用より前に次を記録します。
+
+- 一意なrun ID
+- 固定値`SKIP_AUTOEXEC`
+- `CurrentProject.FullName`とラッパーが渡した期待パスの一致真偽
+- `Forms.Count`
+- `Application.hWndAccessApp`
+- hWndからDB内部で取得したPID
+
+[参照VBAモジュール](../examples/AccessPlaybookStartupBypass.bas)は、4個の`ACCESS_STARTUP_BYPASS_*`環境変数がすべて空なら何もせず戻ります。検証ラッパーから値を受けた場合だけ、値そのものを含まないJSONを同一ローカルstageへ一時ファイルからrenameして出力し、確認応答を最大10秒待って`Application.Quit acQuitSaveNone`で終了します。環境変数が一部だけ存在する場合や出力失敗時は、通常処理へ進まず保存せず終了します。
+
+呼出側は[検証ラッパー](../examples/validate-access-startup-bypass.ps1)を使います。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File ".\examples\validate-access-startup-bypass.ps1" `
+  -DatabasePath "C:\work\project_work\stage_gui_trusted\app.verification.accdb" `
+  -ExpectedInputSha256 "<事前に承認した使い捨てコピーのSHA-256>" `
+  -OutputDirectory "C:\work\project_work\stepNNN_baseline\07_startup_bypass_attestation" `
+  -AcknowledgeTrustedLocation `
+  -AcknowledgeFailureIsolation
+```
+
+分岐に不具合があれば通常起動へ進み得るため、ラッパーは`-AcknowledgeFailureIsolation`も必須にします。この確認は、到達し得る全接続先が承認済み検証環境を指すこと、または本番・共有・不明な外部依存先へ到達できない隔離が制御試験で有効だったことを意味します。単に接続先が停止中、資格情報が不明、タイムアウトが短いという状態は隔離の証拠にしません。条件を作れない場合は自動検証を実行しません。
+
+ラッパーは、既存AccessとShift押下を拒否し、対象DB・Access実体・コマンドライン・作成時刻を専用PIDへ結び付けます。結果を受け取った時点でhWnd由来PIDを照合し、その後に確認応答ファイルを書きます。run ID、command、対象DB一致、`Forms.Count=0`、内部PID、hWnd由来PID、正常終了、lock消失がそろった場合だけ`PASS`です。ACCDBは開閉で変化し得るため使い捨てコピーを使い、前後SHA-256は結果に記録しますが一致を合格条件にしません。
+
+時間上限では外部watchdogが、実行ファイル、PID、作成時刻を再照合します。停止前に[ウィンドウ記録ツール](../examples/get-access-window-snapshot.ps1)を1回だけ呼び、hWnd、class、caption、visible、enabled、owner hWndをローカルJSONへ残してから専用PIDだけを停止します。captionにはDB名、パス、エラー内容が含まれ得るため、結果一式を公開リポジトリ、AI、申し送りへ転載しません。ウィンドウ0件、列挙失敗、ダイアログ未検出はモーダル不在の証明ではありません。
+
+強制停止後にlockが残った場合は、専用PIDの消失と同じDBを開く別Accessがないことを確認し、ファイル名、サイズ、更新時刻、SHA-256を隔離stageへ記録してからlockだけを削除できます。lock本文は利用者名や端末情報を含み得るため保存・転載しません。failed ACCDBはlock削除後も再利用しません。
+
+この検証の`PASS`は完全一致分岐だけの証明です。通常起動、自己テスト、GUIの許可には、[通常起動前の外部接続棚卸し](#231-通常起動前の外部接続棚卸し)の合格が別途必要です。
 
 ### 2.4 COM起動ゲート
 

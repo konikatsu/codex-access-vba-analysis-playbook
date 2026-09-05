@@ -34,8 +34,11 @@
 8. 通常起動、自己テスト、GUIを許す前に、[起動経路上の全接続元・接続先を棚卸し](17_access-development-workflow-reference.md#231-通常起動前の外部接続棚卸し)し、すべてが承認済み検証環境を指すことと到達性を確認する。通常起動と`/cmd SKIP_AUTOEXEC`起動は別々に検証する。
 9. 合格した自動起動無効化対応版を開発baselineとして凍結する。
 
+`/cmd SKIP_AUTOEXEC`の自動検証はROTへのattachを合格条件にせず、[対象Access自身が出す実行ID付き証跡](17_access-development-workflow-reference.md#232-skip_autoexecの内部証跡)で判定します。
+
 ```vb
 If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Then
+    AccessPlaybookAttestStartupBypassIfRequested
     Exit Function
 End If
 ```

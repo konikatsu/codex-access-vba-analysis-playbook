@@ -103,6 +103,8 @@ $access.OpenCurrentDatabase($dbPath)
 - [Shift-bypassでAccess DBを開く](examples/open-access-devmode.ps1)
 - [AutomationSecurity=3の制約を確認してAccess DBを開く](examples/open-access-no-autoexec.ps1)
 - [/cmd SKIP_AUTOEXEC でAccess DBを開く](examples/open-access-skip-autoexec.ps1)
+- [/cmd SKIP_AUTOEXEC を対象PIDの内部証跡で検証する](examples/validate-access-startup-bypass.ps1)
+- [Access PIDのトップレベルウィンドウを記録する](examples/get-access-window-snapshot.ps1)
 - [Docker SQL Serverテスト環境を起動する](examples/start-sqlserver-access-test.ps1)
 - [Access資産を外部ツールでExportする](examples/export-access-assets.ps1)
 
