@@ -84,7 +84,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ウォッチドッグは時間上限でShiftを解放し、`hWndAccessApp`から記録したPIDと実行ファイルが一致するAccessだけを停止します。既存の`MSACCESS.EXE`を一括停止しません。
 
-現行ツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。現行ツールだけでタイムアウトした場合は`window_enum=not-implemented`相当としてstage記録へ手作業で残します。この値は現行ツールのsummaryには出ません。モーダルダイアログが原因と断定せず、ウィンドウ証跡が必要な案件では、外部ラッパーで記録PIDを時間制限付きで列挙します。
+現行の外部Exportツールは、タイムアウト直前のトップレベルウィンドウ列挙を実装していません。外部Exportツールだけでタイムアウトした場合は`window_enum=not-implemented`相当としてstage記録へ手作業で残します。この値は外部Exportツールのsummaryには出ません。モーダルダイアログが原因と断定せず、ウィンドウ証跡が必要な案件では、外部ラッパーで記録PIDを時間制限付きで列挙します。
 
 Shiftが既に押されている場合、ツールは入力状態を変更せず失敗します。環境変数の有無と値は、ユーザープロファイル等をマスクして`environment.json`へ記録します。`PATHEXT`や`CommonProgramFiles`が欠けた制限環境では、DLL消失と誤診断しないようCOM起動前に失敗させます。
 

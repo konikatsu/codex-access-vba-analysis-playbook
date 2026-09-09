@@ -56,7 +56,7 @@ Public Sub AccessPlaybookAttestStartupBypassIfRequested()
     acknowledgePath = Environ$("ACCESS_STARTUP_BYPASS_ACK_PATH")
     expectedDatabasePath = Environ$("ACCESS_STARTUP_BYPASS_EXPECTED_DB_PATH")
 
-    If Len(runId) = 0 And Len(resultPath) = 0 And Len(acknowledgePath) = 0 And Len(expectedDatabasePath) = 0 Then
+    If Len(runId) = 0 Or Len(resultPath) = 0 Or Len(acknowledgePath) = 0 Or Len(expectedDatabasePath) = 0 Then
         Exit Sub
     End If
 
@@ -78,6 +78,7 @@ Public Sub AccessPlaybookAttestStartupBypassIfRequested()
         statusText = "FAIL"
     End If
 
+    ' Keep this payload ASCII-only while Print # is used for output.
     payload = "{""schema_version"":1,""run_id"":""" & runId & _
         """,""command"":""SKIP_AUTOEXEC"",""status"":""" & statusText & _
         """,""database_path_match"":" & AccessPlaybookBooleanJson(databasePathMatches) & _

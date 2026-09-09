@@ -74,7 +74,7 @@ If StrComp(Nz(Command(), vbNullString), "SKIP_AUTOEXEC", vbBinaryCompare) = 0 Th
 End If
 ```
 
-通常の`/cmd SKIP_AUTOEXEC`では環境変数がないため、ヘルパーは何も出力せず従来どおり画面を開いたままにします。[検証ラッパー](../../examples/validate-access-startup-bypass.ps1)から起動した場合だけ、一意なrun ID、固定command、対象DB一致、開いているフォーム数、`hWndAccessApp`、PIDをローカル結果へ出し、ラッパーの確認応答後に保存せず終了します。
+通常の`/cmd SKIP_AUTOEXEC`では検証用環境変数がないため、ヘルパーは何も出力せず従来どおり画面を開いたままにします。4変数の一部だけが設定されている場合も、利用者のAccessを終了させず何も出力せず戻ります。[検証ラッパー](../../examples/validate-access-startup-bypass.ps1)から4変数をすべて設定して起動した場合だけ、一意なrun ID、固定command、対象DB一致、開いているフォーム数、`hWndAccessApp`、PIDをローカル結果へ出し、ラッパーの確認応答後に保存せず終了します。
 
 検証は信頼済みGUI用stageの使い捨てコピーで行います。ただし分岐が失敗すれば通常起動処理が続くため、到達し得る全接続先が承認済み検証環境を指すか、失敗時にも本番・共有・不明な外部依存先へ到達できないことを別の制御試験で確認した隔離環境が必要です。結果がない、run IDが違う、対象DB不一致、フォームが開く、hWnd由来PIDが専用PIDと違う、タイムアウト、PIDまたはlockが残る場合は`FAIL`です。通常起動は、外部接続棚卸しが別途合格するまで行いません。
 

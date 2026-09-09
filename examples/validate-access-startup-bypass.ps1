@@ -197,6 +197,7 @@ if (Test-Path -LiteralPath $outputFullPath) {
 $attestationPath = Join-Path $outputFullPath 'startup-bypass-attestation.json'
 $acknowledgePath = Join-Path $outputFullPath 'startup-bypass-attestation.ack'
 $windowSnapshotPath = Join-Path $outputFullPath 'window-snapshot.json'
+$watchdogWindowSnapshotPath = Join-Path $outputFullPath 'window-snapshot-watchdog.json'
 $watchdogMarkerPath = Join-Path $outputFullPath 'watchdog-result.json'
 $validationPath = Join-Path $outputFullPath 'validation-summary.json'
 $windowSnapshotTool = Join-Path $PSScriptRoot 'get-access-window-snapshot.ps1'
@@ -336,7 +337,7 @@ $json = ConvertTo-Json -InputObject $payload -Depth 5
         '-ExpectedCreationTimeUtcTicks', $creationTimeUtcTicks,
         '-TimeoutSeconds', $TimeoutSeconds,
         '-WindowSnapshotTool', ('"{0}"' -f $windowSnapshotTool),
-        '-WindowSnapshotPath', ('"{0}"' -f $windowSnapshotPath),
+        '-WindowSnapshotPath', ('"{0}"' -f $watchdogWindowSnapshotPath),
         '-MarkerPath', ('"{0}"' -f $watchdogMarkerPath)
     )
     $watchdog = Start-Process -FilePath $windowsPowerShell -ArgumentList $watchdogArguments -WindowStyle Hidden -PassThru
@@ -456,7 +457,28 @@ finally {
         $result.watchdog_fired = [bool]$watchdogResult.watchdog_fired
         $result.window_enum = [string]$watchdogResult.window_enum
     }
-    if (Test-Path -LiteralPath $windowSnapshotPath -PathType Leaf) {
+    $snapshotValidationFailed = $false
+    $validSnapshotCount = 0
+    foreach ($snapshotPath in @($windowSnapshotPath, $watchdogWindowSnapshotPath)) {
+        if (Test-Path -LiteralPath $snapshotPath -PathType Leaf) {
+            try {
+                $windowSnapshot = Read-Utf8JsonWithRetry -Path $snapshotPath
+                if ($null -eq $process -or
+                    [int]$windowSnapshot.process_id -ne $process.Id -or
+                    [long]$windowSnapshot.process_creation_time_utc_ticks -ne $creationTimeUtcTicks) {
+                    throw 'The window snapshot identity does not match the launched Access process.'
+                }
+                $validSnapshotCount++
+            }
+            catch {
+                $snapshotValidationFailed = $true
+            }
+        }
+    }
+    if ($snapshotValidationFailed) {
+        $result.window_enum = 'failed'
+    }
+    elseif ($validSnapshotCount -gt 0) {
         $result.window_enum = 'captured'
     }
 
