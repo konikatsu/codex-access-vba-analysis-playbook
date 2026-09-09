@@ -223,6 +223,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 初めて代替デスクトップを使う環境では、カナリアDBで「Accessウィンドウが作成した`HDESK`に属する」「そのデスクトップ上で仮想Shiftによる起動バイパスが成立する」を確認してから標準経路にします。確認できない環境では無人GUI試験を続行せず、手動確認または承認済みの別経路へ切り替えます。
 
+UIを持たない別プロセスの所属確認に、親プロセスから対象TIDを指定する`GetThreadDesktop`を必須ゲートとして使いません。親が通常デスクトップにいる場合だけでなく、親側の専用検査スレッドを対象のprivate desktopへ所属させた場合も、同一ユーザー・同一window stationの非業務カナリアで`ERROR_ACCESS_DENIED (5)`となった実測があります。これはWindows全般で常に失敗するという結論ではありませんが、Microsoftの公開仕様には別プロセス照合の成功条件とエラー5の条件が明記されていません。ホスト上の肯定証跡がない限り、`STARTUPINFO.lpDesktop`指定や子プロセスの自己申告だけで独立照合済みとは判定しません。
+
 親プロセスの環境変数が制限されていると、`PATHEXT`欠落によるexe解決失敗や、`CommonProgramFiles`欠落によるCOM DLL解決失敗が起きます。後者は`0x8007007E`となり、DLLやプロバイダー自体が消えたように見える場合があります。環境フィンガープリントのない観測ログだけで、アプリ、DLL、プロバイダーの障害と結論しません。完全なログオン環境でも再現するかを比較します。
 
 レジストリの`REG_EXPAND_SZ`を確認するときは、値に含まれる環境変数を`[Environment]::ExpandEnvironmentVariables()`で展開し、`%...%`が残っていないことを確認してから`Test-Path`します。`0x8007007E`はモジュールを解決できなかった証拠であり、対象ファイルが存在しない証拠ではありません。展開済みファイルの`Test-Path`成功も、依存DLL、bitness、ロード条件まで満たす証拠にはなりません。DAOのin-process生成、Access.Applicationのout-of-process生成、exe直接起動を分けて記録します。
@@ -646,6 +648,7 @@ canaryを使う経路では否定試験時間窓の受付件数が0であるこ�
 - 確実な画面分離は、Win32のDesktopオブジェクト（`HDESK`）を作り、その上でAccessを起動して行う。これは窓と入力の分離であり、権限、ファイル、ネットワークを隔離するセキュリティサンドボックスではない。
 - 実装順は、`CreateDesktop`で`HDESK`を作成し、`STARTUPINFO.lpDesktop`を指定した`CreateProcess`でPowerShellなどのラッパーをそのデスクトップ上に起動し、ラッパー内から`CreateObject("Access.Application")`を呼ぶ。通常デスクトップでAccessを起動してから移動しようとしない。
 - 環境ごとの初回はカナリアDBを使い、AccessウィンドウのDesktop所属とShift-bypass成立を確認する。未確認の環境では、この組合せを成立済みと断定しない。
+- UIを持たない別プロセスの所属を、親からの`GetThreadDesktop(childTid)`だけで証明しない。この照合は同一window stationでもエラー5になる実測がある。ウィンドウ列挙など別の肯定証跡を用意できない場合は、所属確認を未実装として無人GUI試験を止める。
 - `acHidden`を無人GUI試験の標準にしない。
 - 試験専用コピーに限り、修飾なし`MsgBox`をログ化する無人モジュールを使用できる。
 - `VBA.Interaction.MsgBox`、Access本体、外部COMのダイアログは別途検出する。
