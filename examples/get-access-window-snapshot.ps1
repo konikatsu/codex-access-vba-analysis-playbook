@@ -79,6 +79,8 @@ if ($null -eq $identity -or
     ([DateTime]$identity.CreationDate).ToUniversalTime().Ticks -ne $ExpectedCreationTimeUtcTicks) {
     throw 'The process identity does not match the recorded Access process.'
 }
+$observedProcessId = [int]$identity.ProcessId
+$observedCreationTimeUtcTicks = ([DateTime]$identity.CreationDate).ToUniversalTime().Ticks
 
 if (-not ('AccessWindowSnapshotNative' -as [type])) {
     Add-Type @'
@@ -150,11 +152,20 @@ if (-not [AccessWindowSnapshotNative]::EnumWindows($callback, [IntPtr]::Zero)) {
     throw 'EnumWindows failed.'
 }
 
+$identityAfterCapture = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue
+if ($null -eq $identityAfterCapture -or
+    $identityAfterCapture.Name -ine 'MSACCESS.EXE' -or
+    $identityAfterCapture.ExecutablePath -ine $expectedExeFullPath -or
+    $null -eq $identityAfterCapture.CreationDate -or
+    ([DateTime]$identityAfterCapture.CreationDate).ToUniversalTime().Ticks -ne $observedCreationTimeUtcTicks) {
+    throw 'The process identity changed during window enumeration.'
+}
+
 $payload = [ordered]@{
     schema_version = 1
     captured_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
-    process_id = $ProcessId
-    process_creation_time_utc_ticks = $ExpectedCreationTimeUtcTicks
+    process_id = $observedProcessId
+    process_creation_time_utc_ticks = $observedCreationTimeUtcTicks
     access_executable_sha256 = (Get-FileHash -LiteralPath $expectedExeFullPath -Algorithm SHA256).Hash
     window_count = $windows.Count
     windows = @($windows.ToArray())

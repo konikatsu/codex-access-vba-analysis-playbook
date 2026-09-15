@@ -63,9 +63,6 @@ Public Sub AccessPlaybookAttestStartupBypassIfRequested()
     On Error GoTo AttestationFailed
 
     If Not AccessPlaybookIsRunIdSafe(runId) Then Err.Raise 5, , "Invalid startup bypass run ID."
-    If Len(resultPath) = 0 Or Len(acknowledgePath) = 0 Or Len(expectedDatabasePath) = 0 Then
-        Err.Raise 5, , "Incomplete startup bypass attestation environment."
-    End If
 
     databasePathMatches = (StrComp(CurrentProject.FullName, expectedDatabasePath, vbTextCompare) = 0)
     openFormCount = Forms.Count

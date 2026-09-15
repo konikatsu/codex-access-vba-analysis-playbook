@@ -203,7 +203,7 @@ $validationPath = Join-Path $outputFullPath 'validation-summary.json'
 $windowSnapshotTool = Join-Path $PSScriptRoot 'get-access-window-snapshot.ps1'
 
 $result = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     status = 'FAIL'
     run_id = $RunId.ToLowerInvariant()
     requested_command = 'SKIP_AUTOEXEC'
@@ -222,6 +222,8 @@ $result = [ordered]@{
     hwnd_process_id_match = $false
     watchdog_fired = $false
     window_enum = 'not-needed'
+    window_enum_main = 'not-needed'
+    window_enum_watchdog = 'not-needed'
     access_pid_gone = $false
     lock_files_remaining = @()
     shift_released = $false
@@ -291,6 +293,27 @@ $ErrorActionPreference = 'SilentlyContinue'
 Start-Sleep -Seconds $TimeoutSeconds
 $windowEnum = 'process-not-running'
 $processStopped = $false
+
+function Write-WatchdogMarker {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$WindowEnum,
+        [Parameter(Mandatory = $true)][bool]$ProcessStopped
+    )
+
+    $payload = [ordered]@{
+        watchdog_fired = $true
+        access_pid = $AccessPid
+        process_stopped = $ProcessStopped
+        window_enum = $WindowEnum
+    }
+    $json = ConvertTo-Json -InputObject $payload -Depth 5
+    $temporaryPath = $Path + '.' + $PID + '.tmp'
+    [IO.File]::WriteAllText($temporaryPath, $json + [Environment]::NewLine, (New-Object Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $temporaryPath -Destination $Path -Force
+}
+
+Write-WatchdogMarker -Path $MarkerPath -WindowEnum 'pending' -ProcessStopped $false
 $candidate = Get-CimInstance Win32_Process -Filter "ProcessId=$AccessPid"
 if ($null -ne $candidate -and
     $candidate.Name -ieq 'MSACCESS.EXE' -and
@@ -315,15 +338,7 @@ if ($null -ne $candidate -and
         $processStopped = $true
     }
 }
-
-$payload = [ordered]@{
-    watchdog_fired = $true
-    access_pid = $AccessPid
-    process_stopped = $processStopped
-    window_enum = $windowEnum
-}
-$json = ConvertTo-Json -InputObject $payload -Depth 5
-[IO.File]::WriteAllText($MarkerPath, $json + [Environment]::NewLine, (New-Object Text.UTF8Encoding($false)))
+Write-WatchdogMarker -Path $MarkerPath -WindowEnum $windowEnum -ProcessStopped $processStopped
 '@
 
     $watchdogPath = Join-Path $outputFullPath 'startup-bypass-watchdog.ps1'
@@ -414,7 +429,8 @@ finally {
 
     if ($null -ne $process) {
         $process.Refresh()
-        $safeToStop = -not $process.HasExited -and (
+        $processStillRunning = -not $process.HasExited
+        $safeToStop = $processStillRunning -and (
             ($creationTimeUtcTicks -ne 0L -and
                 (Test-ExpectedAccessProcess -ProcessId $process.Id -ExpectedPath $accessExeFullPath -ExpectedCreationTimeUtcTicks $creationTimeUtcTicks)) -or
             ($processStartTimeUtcTicks -ne 0L -and
@@ -424,10 +440,10 @@ finally {
             if (-not (Test-Path -LiteralPath $windowSnapshotPath)) {
                 try {
                     & $windowSnapshotTool -ProcessId $process.Id -ExpectedAccessExe $accessExeFullPath -ExpectedCreationTimeUtcTicks $creationTimeUtcTicks -OutputPath $windowSnapshotPath
-                    $result.window_enum = 'captured'
+                    $result.window_enum_main = 'captured'
                 }
                 catch {
-                    $result.window_enum = 'failed'
+                    $result.window_enum_main = 'failed'
                 }
             }
             $safeToStopAfterSnapshot =
@@ -440,26 +456,66 @@ finally {
                 Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue
             }
         }
+        elseif ($processStillRunning) {
+            $result.window_enum_main = 'not-attempted-identity-unproven'
+            $identityError = 'The running Access process identity could not be proven; it was not stopped.'
+            $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+                $identityError
+            }
+            else {
+                $validationError + ' ' + $identityError
+            }
+        }
     }
 
     if ($null -ne $watchdog) {
         try {
             if (-not $watchdog.HasExited) {
-                Stop-Process -Id $watchdog.Id -Force
-                [void]$watchdog.WaitForExit(5000)
+                [void]$watchdog.WaitForExit(2000)
+                $watchdog.Refresh()
+                if (-not $watchdog.HasExited) {
+                    Stop-Process -Id $watchdog.Id -Force
+                    [void]$watchdog.WaitForExit(5000)
+                }
             }
         }
         catch {}
     }
 
     if (Test-Path -LiteralPath $watchdogMarkerPath -PathType Leaf) {
-        $watchdogResult = Read-Utf8JsonWithRetry -Path $watchdogMarkerPath
-        $result.watchdog_fired = [bool]$watchdogResult.watchdog_fired
-        $result.window_enum = [string]$watchdogResult.window_enum
+        try {
+            $watchdogResult = Read-Utf8JsonWithRetry -Path $watchdogMarkerPath
+            if ($null -eq $process -or
+                $watchdogResult.watchdog_fired -isnot [bool] -or
+                -not [bool]$watchdogResult.watchdog_fired -or
+                [int]$watchdogResult.access_pid -ne $process.Id) {
+                throw 'The watchdog result identity or fired flag is invalid.'
+            }
+            $result.watchdog_fired = $true
+            $watchdogWindowEnum = [string]$watchdogResult.window_enum
+            if ($watchdogWindowEnum -notin @('captured', 'failed', 'process-not-running')) {
+                throw "Unexpected watchdog window enumeration status: $watchdogWindowEnum"
+            }
+            $result.window_enum_watchdog = $watchdogWindowEnum
+        }
+        catch {
+            $result.watchdog_fired = $true
+            $result.window_enum_watchdog = 'failed'
+            $watchdogReadError = "Watchdog result could not be validated: $($_.Exception.Message)"
+            $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+                $watchdogReadError
+            }
+            else {
+                $validationError + ' ' + $watchdogReadError
+            }
+        }
     }
-    $snapshotValidationFailed = $false
-    $validSnapshotCount = 0
-    foreach ($snapshotPath in @($windowSnapshotPath, $watchdogWindowSnapshotPath)) {
+    foreach ($snapshotSource in @(
+        [pscustomobject]@{ Path = $windowSnapshotPath; Property = 'window_enum_main' },
+        [pscustomobject]@{ Path = $watchdogWindowSnapshotPath; Property = 'window_enum_watchdog' }
+    )) {
+        $snapshotPath = $snapshotSource.Path
+        $statusProperty = $snapshotSource.Property
         if (Test-Path -LiteralPath $snapshotPath -PathType Leaf) {
             try {
                 $windowSnapshot = Read-Utf8JsonWithRetry -Path $snapshotPath
@@ -468,18 +524,31 @@ finally {
                     [long]$windowSnapshot.process_creation_time_utc_ticks -ne $creationTimeUtcTicks) {
                     throw 'The window snapshot identity does not match the launched Access process.'
                 }
-                $validSnapshotCount++
+                if ($result[$statusProperty] -notin @('failed', 'not-attempted-identity-unproven')) {
+                    $result[$statusProperty] = 'captured'
+                }
             }
             catch {
-                $snapshotValidationFailed = $true
+                $result[$statusProperty] = 'failed'
             }
         }
+        elseif ($result[$statusProperty] -eq 'captured') {
+            $result[$statusProperty] = 'failed'
+        }
     }
-    if ($snapshotValidationFailed) {
-        $result.window_enum = 'failed'
+
+    $windowEnumStatuses = @($result.window_enum_main, $result.window_enum_watchdog)
+    $result.window_enum = if (@($windowEnumStatuses | Where-Object { $_ -in @('failed', 'not-attempted-identity-unproven') }).Count -gt 0) {
+        'failed'
     }
-    elseif ($validSnapshotCount -gt 0) {
-        $result.window_enum = 'captured'
+    elseif ($windowEnumStatuses -contains 'captured') {
+        'captured'
+    }
+    elseif ($windowEnumStatuses -contains 'process-not-running') {
+        'process-not-running'
+    }
+    else {
+        'not-needed'
     }
 
     $result.access_pid_gone = if ($null -eq $process) {

@@ -160,7 +160,7 @@ INI差替えだけで安全と判断できるのは、対象操作から到達�
 
 リンクテーブルの`TableDef.Connect`を変更する場合は、接続文字列から資格情報を除いて解析した接続先識別子が独立したallowlistと完全一致することを確認し、専用プロセスと時間制限の下で`RefreshLink`を呼びます。`RefreshLink`は外部通信を伴い得るため、意図しない接続先への通信を遮断または監視できない環境では実行しません。処理後はDAOを閉じ、再オープンして永続化された`Connect`を再読します。再読した値も事前確認と同じ方法で接続先識別子へ正規化し、allowlistと完全一致することを確認します。`QueryDef.Connect`、保存SQL、VBAなどを変更した場合も、閉じて再オープンしたコピーから値を再取得します。変更、再接続、再読、再照合のいずれかが失敗したコピーは`failed`とし、通常起動しません。現行の共通ツールは、この書換えと`RefreshLink`を実装していません。
 
-DAO `DBEngine.120`とAccess 16.0.20326.20112のローカル使い捨てDBに作成したAccess形式リンク（`;DATABASE=`）による実測では、`TableDef.Connect`だけを変更すると、同じDAOセッションでは新しい値を再読できても、閉じて再オープンした後は旧値へ戻り、リンク先データも旧接続先のままでした。`RefreshLink`を呼んだ場合だけ、再オープン後も新しい接続先が保持されました。したがって、同一セッション内の再読を永続化の証拠にしません。この結果は測定した環境での確認済み事実であり、別バージョンでも閉じて再オープンする判定を省略しません。ODBCリンクで`RefreshLink`が成功した後の永続化は未測定です。
+DAO `DBEngine.120`とAccess 16.0.20326.20112のローカル使い捨てDBに作成したAccess形式リンク（`;DATABASE=`）による実測では、`TableDef.Connect`だけを変更すると、同じDAOセッションでは新しい値を再読できても、閉じて再オープンした後は旧値へ戻り、リンク先データも旧接続先のままでした。`RefreshLink`を呼んだ場合だけ、再オープン後も新しい接続先が保持されました。したがって、同一セッション内の再読を永続化の証拠にしません。この結果は測定した環境での確認済み事実ですが、Office bitnessは証跡に記録されていないため、bitnessをまたぐ一般化には使いません。再測定ではOffice bitness、DAO・Access build、再現手順、結果ファイルのstage相対パスとSHA-256を記録します。別バージョンでも閉じて再オープンする判定を省略しません。ODBCリンクで`RefreshLink`が成功した後の永続化は未測定です。
 
 接続元または接続先を確定できない場合は、通常起動、自己テスト、GUIを行いません。停止中または不明な本番依存先を、この作業のために起動しません。
 
@@ -177,7 +177,7 @@ exe直接起動したAccessへのROT attachは、合格条件にしません。`
 - `Application.hWndAccessApp`
 - hWndからDB内部で取得したPID
 
-[参照VBAモジュール](../examples/AccessPlaybookStartupBypass.bas)は、4個の`ACCESS_STARTUP_BYPASS_*`環境変数がすべて空なら何もせず戻ります。検証ラッパーから値を受けた場合だけ、値そのものを含まないJSONを同一ローカルstageへ一時ファイルからrenameして出力し、確認応答を最大10秒待って`Application.Quit acQuitSaveNone`で終了します。環境変数が一部だけ存在する場合や出力失敗時は、通常処理へ進まず保存せず終了します。
+[参照VBAモジュール](../examples/AccessPlaybookStartupBypass.bas)は、4個の`ACCESS_STARTUP_BYPASS_*`環境変数のうち1個でも空なら何もせず戻り、利用者が開いているAccessを終了しません。4個がすべて存在する検証ラッパー経路だけ、値そのものを含まないJSONを同一ローカルstageへ一時ファイルからrenameして出力し、確認応答を最大10秒待って`Application.Quit acQuitSaveNone`で終了します。4個がそろった後の値検査または出力に失敗した場合は、通常処理へ進まず保存せず終了します。
 
 呼出側は[検証ラッパー](../examples/validate-access-startup-bypass.ps1)を使います。
 
@@ -195,9 +195,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ラッパーは、既存AccessとShift押下を拒否し、対象DB・Access実体・コマンドライン・作成時刻を専用PIDへ結び付けます。結果を受け取った時点でhWnd由来PIDを照合し、その後に確認応答ファイルを書きます。run ID、command、対象DB一致、`Forms.Count=0`、内部PID、hWnd由来PID、正常終了、lock消失がそろった場合だけ`PASS`です。ACCDBは開閉で変化し得るため使い捨てコピーを使い、前後SHA-256は結果に記録しますが一致を合格条件にしません。
 
-時間上限では外部watchdogが、実行ファイル、PID、作成時刻を再照合します。停止前に[ウィンドウ記録ツール](../examples/get-access-window-snapshot.ps1)を1回だけ呼び、hWnd、class、caption、visible、enabled、owner hWndをローカルJSONへ残してから専用PIDだけを停止します。captionにはDB名、パス、エラー内容が含まれ得るため、結果一式を公開リポジトリ、AI、申し送りへ転載しません。ウィンドウ0件、列挙失敗、ダイアログ未検出はモーダル不在の証明ではありません。
+時間上限では外部watchdogが、実行ファイル、PID、作成時刻を再照合します。停止前に[ウィンドウ記録ツール](../examples/get-access-window-snapshot.ps1)を1回だけ呼び、hWnd、class、caption、visible、enabled、owner hWndをローカルJSONへ残してから専用PIDだけを停止します。通常cleanupとwatchdogが別々に取得するため、1実行で`window-snapshot.json`と`window-snapshot-watchdog.json`の最大2ファイルが生成されます。captionにはDB名、パス、エラー内容が含まれ得るため、結果一式を公開リポジトリ、別AI、申し送りへ転載しません。ウィンドウ0件、列挙失敗、ダイアログ未検出はモーダル不在の証明ではありません。
 
-検証ラッパーは`validation-summary.json`の`window_enum`へ、`not-needed`（停止が不要で列挙しなかった）、`captured`、`failed`、`process-not-running`のいずれかを記録します。`not-implemented`は列挙機能を持たない別の実行系でstageへ手作業で残す値です。`-WindowStyle Hidden`は画面分離の証拠ではないため、この検証は既定で有人実行します。無人実行する場合は、先にカナリアで確認したprivate desktop上で検証ラッパー自身を起動し、Accessと同じデスクトップからスナップショットを取得します。別デスクトップから`EnumWindows`を呼ぶ実装を、対象Accessのウィンドウ証跡として使いません。
+検証ラッパーの`validation-summary.json` schema 2は、`window_enum_main`と`window_enum_watchdog`へ出所別の結果を残し、`window_enum`へ集約します。出所別は`not-needed`、`captured`、`failed`、`process-not-running`を使い、本体側で実行中PIDのidentityを証明できない場合は`not-attempted-identity-unproven`とします。集約は、いずれかが`failed`またはidentity未証明なら`failed`、それ以外で取得ありなら`captured`、次に`process-not-running`、どれもなければ`not-needed`です。`not-implemented`は列挙機能を持たない別の実行系でstageへ手作業で残す値です。参照ツールの列挙処理自体には独立タイムアウトがないため、時間制限が必須の実行系は別プロセスで囲う必要があり、その実装はこのリポジトリにありません。`-WindowStyle Hidden`は画面分離の証拠ではないため、この検証は既定で有人実行します。無人実行する場合は、先にカナリアで確認したprivate desktop上で検証ラッパー自身を起動し、Accessと同じデスクトップからスナップショットを取得します。別デスクトップから`EnumWindows`を呼ぶ実装を、対象Accessのウィンドウ証跡として使いません。
 
 強制停止後にlockが残った場合は、専用PIDの消失と同じDBを開く別Accessがないことを確認し、ファイル名、サイズ、更新時刻、SHA-256を隔離stageへ記録してからlockだけを削除できます。lock本文は利用者名や端末情報を含み得るため保存・転載しません。failed ACCDBはlock削除後も再利用しません。
 
@@ -216,7 +216,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 7. 外部ウォッチドッグの時間上限を開始し、`OpenCurrentDatabase`の直前に仮想Shiftを押す。
 8. Shiftを押したまま`OpenCurrentDatabase`を呼び、正常復帰直後にShiftを解放する。例外、ハング、タイムアウトでもウォッチドッグが必ず解放する。
 9. 起動直後に、フォーム、起動ログ、段階ログなどから通常起動処理が走っていないことを確認する。
-10. タイムアウト時はウォッチドッグでShiftを解放する。列挙機能がある実行系では、停止前に記録PIDに属するトップレベルウィンドウを時間制限付きで1回だけ列挙し、クラス名、キャプション、可視・有効状態、所有関係をstage記録へ残す。列挙機能がなければ`window_enum=not-implemented`、失敗したら`window_enum=failed`とstage記録へ手作業で残す。外部Exportツールには列挙機能がなく、そのsummaryにも出ない。その後、記録したPIDだけを停止し、既存のAccessプロセスを一括停止しない。
+10. タイムアウト時はウォッチドッグでShiftを解放する。列挙機能がある実行系では、停止前に記録PIDに属するトップレベルウィンドウを1回だけ列挙し、クラス名、キャプション、可視・有効状態、所有関係をstage記録へ残す。列挙機能がなければ`window_enum=not-implemented`、失敗したら`window_enum=failed`とstage記録へ手作業で残す。外部Exportツールには列挙機能がなく、そのsummaryにも出ない。その後、記録したPIDだけを停止し、既存のAccessプロセスを一括停止しない。
 11. 終了後にPID消滅、`.laccdb`消失、仮想Shift解放を確認する。
 
 `Application.Quit`または`FinalReleaseComObject`の復帰直後に、単発の`Get-Process`だけでPID消滅を判定しません。Accessの終了は遅れて完了する場合があるため、外部watchdogを維持したまま、まず記録したPID、実行ファイル、作成時刻が一致するプロセスの自然終了を時間制限付きで待ちます。時間上限後も同じidentityのAccessが残る場合だけ、停止直前にidentityを再照合して専用PIDを停止し、PID消失後にlock消失も短い時間上限で待ちます。lockが時間内に消えなければ`FAIL`です。PIDが存在してもidentityを証明できない場合は停止せず`FAIL`とし、手動調査で解消するまで同じホストで再試行しません。待機、必要な強制停止、PID・lock確認が終わってからwatchdogを停止します。
@@ -635,9 +635,9 @@ canaryを使う経路では否定試験時間窓の受付件数が0であるこ�
 
 `selftest_negative_test_evidence_sha256`は、観測設定の事前照合、ポリシー切替、プロセス生成、制御試験、2通りの否定試験、通信・名前解決・ファイル観測の各ログと結果JSONを列挙した証跡manifestのSHA-256です。証跡manifestは`selftest_evidence`ディレクトリへ置き、前述のcontract manifestと同じcanonical形式で作ります。
 
-個々の否定試験が合格するのは、ラッパーが非PASSとして終了し、結果JSONが`status=FAIL`、`target_allowlist_match=false`、空でない`error_code`を持ち、起動したAccess PID、記録済み子孫プロセス、ロックがすべて消え、canary受付、業務接続先・分類不能な宛先への通信試行、業務接続先・分類不能な名前解決照会、成功した非ループバック通信、許可外ファイルopenがすべて0件の場合だけです。時間窓の終了時に記録済み子孫プロセスが残る場合は、その終了まで観測を時間制限付きで延長します。延長中に追跡中の子孫から生成されたプロセスも再帰的に追跡対象へ加え、同じ上限内に全対象が終了しなければ`FAIL`とします。子孫の帰属はPIDだけでなく実行ファイルと作成時刻を含むidentityで判定し、identityが一致しないPIDの事象は子孫へ帰属させず分類不能として扱います。観測を先に終了して後続通信を見逃してはいけません。非PASS時は参照ラッパーがPIDとロックの検査へ到達しないため、その消失は観測側または外側の実行ハーネスが確認し、証跡に含めます。いずれかが1件でもあるか証明できなければ、その否定試験は不合格です。`selftest_negative_test_status`を`PASS`にできるのは、必要な制御試験と2通りの否定試験がすべて合格し、manifestと各証跡のSHA-256が一致する場合だけです。それ以外は`FAIL`、`要実機確認`、または`未検証`とします。
+個々の否定試験が合格するのは、ラッパーが非PASSとして終了し、結果JSONが`status=FAIL`、`target_allowlist_match=false`、空でない`error_code`を持ち、起動したAccess PID、記録済み子孫プロセス、ロックがすべて消え、canary受付、業務接続先・分類不能な宛先への通信試行、業務接続先・分類不能な名前解決照会、成功した非ループバック通信、許可外ファイルopenがすべて0件の場合だけです。試験前からプロセス生成イベントを記録し、短時間だけ存在する子孫も捕捉します。ポーリングだけで子孫が0件だったとは証明しません。時間窓の終了時に記録済み子孫プロセスが残る場合は、試験開始前に固定した絶対時刻まで観測を延長します。延長中に追跡中の子孫から生成されたプロセスも再帰的に加えますが、新しい子孫の生成で期限を延ばしません。期限までに全対象が終了しない、またはidentityを確定できない生成イベントが1件でもある場合は`FAIL`です。子孫の帰属はPIDだけでなく実行ファイルと作成時刻を含むidentityで判定し、identityが一致しないPIDの事象は子孫へ帰属させず分類不能として扱います。観測を先に終了して後続通信を見逃してはいけません。非PASS時は参照ラッパーがPIDとロックの検査へ到達しないため、その消失は観測側または外側の実行ハーネスが確認し、証跡に含めます。いずれかが1件でもあるか証明できなければ、その否定試験は不合格です。`selftest_negative_test_status`を`PASS`にできるのは、必要な制御試験と2通りの否定試験がすべて合格し、manifestと各証跡のSHA-256が一致する場合だけです。それ以外は`FAIL`、`要実機確認`、または`未検証`とします。
 
-`RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`を持つ対象DBごとに、この契約へ従うディスパッチャーを実装します。このリポジトリにはDB側ディスパッチャーの参照実装はありません。INIが指す値をそのままallowlistへ複製せず、本番、共有DB、接続先不明では接続を開く前に拒否します。
+`RUN_SELFTEST_READONLY`と`RUN_SELFTEST_DML`を持つ対象DBごとに、この契約へ従うディスパッチャーを実装します。このリポジトリにはDB側ディスパッチャー、子孫プロセス記録、通信・DNS・ファイル観測ハーネスの参照実装はありません。`open-access-skip-autoexec.ps1`が検証するのは起動したAccessプロセス自身です。INIが指す値をそのままallowlistへ複製せず、本番、共有DB、接続先不明では接続を開く前に拒否します。
 
 結果JSONには最低限、`run_id`、固定`command`、開始・終了時刻、`status`、予定/実行アサーション数、失敗数、削除後残件数、`target_allowlist_match`の真偽値を入れます。allowlistの形式検査または照合で早期`FAIL`にする場合も、これらのキーをすべて書き、未実行の件数は0、`target_allowlist_match=false`とします。診断用の固定エラーコードは`error_code`へ併記します。結果ファイルがない、run IDが違う、実行アサーションが0件、予定数と実行数が違う、`target_allowlist_match`が`true`でない、Accessが時間内に閉じない、終了後にAccess PIDまたはロックが残る場合は`FAIL`です。
 

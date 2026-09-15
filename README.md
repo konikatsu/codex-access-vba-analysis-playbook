@@ -12,7 +12,7 @@ Microsoft Access / VBA の既存システムを、Codex などのAIエージェ�
 ## 必要なときだけ読む
 
 - [Access修正の標準開発手順 詳細リファレンス](docs/17_access-development-workflow-reference.md)
-- [Access外部Exportツール](docs/16_access-external-export.md)
+- [Access外部Exportツール](docs/16_access-external-export.md)（全資産Exportを行う回は必読）
 - [DB内ExportAnalysisInfoによる初見解析](docs/01_export-analysis-info.md)
 
 ## 要件別に読む
