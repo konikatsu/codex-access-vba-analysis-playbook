@@ -225,6 +225,11 @@ $result = [ordered]@{
     window_enum_main = 'not-needed'
     window_enum_watchdog = 'not-needed'
     access_pid_gone = $false
+    natural_exit_wait_ms = 0
+    force_stop_attempted = $false
+    process_identity_unproven = $false
+    watchdog_pid_gone = $false
+    lock_wait_ms = 0
     lock_files_remaining = @()
     shift_released = $false
     started_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
@@ -248,6 +253,8 @@ $watchdog = $null
 $creationTimeUtcTicks = 0L
 $processStartTimeUtcTicks = 0L
 $validationError = $null
+$watchdogDeadline = $null
+$watchdogShutdownStartedAt = $null
 
 try {
     [Environment]::SetEnvironmentVariable('ACCESS_STARTUP_BYPASS_RUN_ID', $RunId.ToLowerInvariant(), 'Process')
@@ -355,9 +362,16 @@ Write-WatchdogMarker -Path $MarkerPath -WindowEnum $windowEnum -ProcessStopped $
         '-WindowSnapshotPath', ('"{0}"' -f $watchdogWindowSnapshotPath),
         '-MarkerPath', ('"{0}"' -f $watchdogMarkerPath)
     )
+    $watchdogDeadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    Write-Utf8Json -Path $watchdogMarkerPath -Value ([ordered]@{
+        watchdog_fired = $false
+        access_pid = $process.Id
+        process_stopped = $false
+        window_enum = 'armed'
+    })
     $watchdog = Start-Process -FilePath $windowsPowerShell -ArgumentList $watchdogArguments -WindowStyle Hidden -PassThru
 
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    $deadline = $watchdogDeadline
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         if (Test-Path -LiteralPath $attestationPath -PathType Leaf) {
             break
@@ -429,6 +443,13 @@ finally {
 
     if ($null -ne $process) {
         $process.Refresh()
+        if (-not $process.HasExited) {
+            $naturalExitStopwatch = [Diagnostics.Stopwatch]::StartNew()
+            [void]$process.WaitForExit(3000)
+            $naturalExitStopwatch.Stop()
+            $result.natural_exit_wait_ms = [int]$naturalExitStopwatch.ElapsedMilliseconds
+            $process.Refresh()
+        }
         $processStillRunning = -not $process.HasExited
         $safeToStop = $processStillRunning -and (
             ($creationTimeUtcTicks -ne 0L -and
@@ -452,12 +473,27 @@ finally {
                 ($processStartTimeUtcTicks -ne 0L -and
                     (Test-ExpectedStartedProcessObject -Process $process -ExpectedPath $accessExeFullPath -ExpectedStartTimeUtcTicks $processStartTimeUtcTicks))
             if ($safeToStopAfterSnapshot) {
-                Stop-Process -Id $process.Id -Force
+                $result.force_stop_attempted = $true
+                try {
+                    Stop-Process -Id $process.Id -Force
+                }
+                catch {
+                    if ($null -ne (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+                        $stopError = "The validated Access process could not be stopped: $($_.Exception.Message)"
+                        $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+                            $stopError
+                        }
+                        else {
+                            $validationError + ' ' + $stopError
+                        }
+                    }
+                }
                 Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue
             }
         }
         elseif ($processStillRunning) {
             $result.window_enum_main = 'not-attempted-identity-unproven'
+            $result.process_identity_unproven = $true
             $identityError = 'The running Access process identity could not be proven; it was not stopped.'
             $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
                 $identityError
@@ -468,18 +504,92 @@ finally {
         }
     }
 
+    $result.access_pid_gone = if ($null -eq $process) {
+        $true
+    }
+    else {
+        $null -eq (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)
+    }
+
+    $databaseDirectory = Split-Path -Parent $databaseFullPath
+    $databaseBaseName = [IO.Path]::GetFileNameWithoutExtension($databaseFullPath)
+    $lockPaths = @(
+        Join-Path $databaseDirectory ($databaseBaseName + '.laccdb')
+        Join-Path $databaseDirectory ($databaseBaseName + '.ldb')
+    )
+    $lockWaitStopwatch = [Diagnostics.Stopwatch]::StartNew()
+    if ($result.access_pid_gone) {
+        while ($lockWaitStopwatch.ElapsedMilliseconds -lt 5000 -and
+            @($lockPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -gt 0) {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    $lockWaitStopwatch.Stop()
+    $result.lock_wait_ms = [int]$lockWaitStopwatch.ElapsedMilliseconds
+
+    $remainingLocks = foreach ($lockPath in $lockPaths) {
+        if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+            try {
+                $item = Get-Item -LiteralPath $lockPath
+                [pscustomobject][ordered]@{
+                    file_name = $item.Name
+                    byte_length = $item.Length
+                    last_write_time_utc = $item.LastWriteTimeUtc.ToString('o')
+                    sha256 = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+                    observation_error = $null
+                }
+            }
+            catch {
+                [pscustomobject][ordered]@{
+                    file_name = [IO.Path]::GetFileName($lockPath)
+                    byte_length = $null
+                    last_write_time_utc = $null
+                    sha256 = $null
+                    observation_error = $_.Exception.Message
+                }
+            }
+        }
+    }
+    $result.lock_files_remaining = @($remainingLocks)
+
     if ($null -ne $watchdog) {
+        $watchdogShutdownStartedAt = [DateTimeOffset]::UtcNow
         try {
             if (-not $watchdog.HasExited) {
-                [void]$watchdog.WaitForExit(2000)
+                $watchdogGraceMilliseconds = 500
+                try {
+                    $currentMarker = Read-Utf8JsonWithRetry -Path $watchdogMarkerPath -Attempts 2 -DelayMilliseconds 100
+                    if ($currentMarker.watchdog_fired -is [bool] -and [bool]$currentMarker.watchdog_fired) {
+                        $watchdogGraceMilliseconds = 16000
+                    }
+                }
+                catch {
+                    $watchdogGraceMilliseconds = 16000
+                }
+                [void]$watchdog.WaitForExit($watchdogGraceMilliseconds)
                 $watchdog.Refresh()
                 if (-not $watchdog.HasExited) {
-                    Stop-Process -Id $watchdog.Id -Force
+                    Stop-Process -Id $watchdog.Id -Force -ErrorAction SilentlyContinue
                     [void]$watchdog.WaitForExit(5000)
                 }
             }
         }
         catch {}
+    }
+    $result.watchdog_pid_gone = if ($null -eq $watchdog) {
+        $true
+    }
+    else {
+        $null -eq (Get-Process -Id $watchdog.Id -ErrorAction SilentlyContinue)
+    }
+    if (-not $result.watchdog_pid_gone) {
+        $watchdogExitError = 'The startup bypass watchdog did not exit.'
+        $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+            $watchdogExitError
+        }
+        else {
+            $validationError + ' ' + $watchdogExitError
+        }
     }
 
     if (Test-Path -LiteralPath $watchdogMarkerPath -PathType Leaf) {
@@ -487,16 +597,26 @@ finally {
             $watchdogResult = Read-Utf8JsonWithRetry -Path $watchdogMarkerPath
             if ($null -eq $process -or
                 $watchdogResult.watchdog_fired -isnot [bool] -or
-                -not [bool]$watchdogResult.watchdog_fired -or
                 [int]$watchdogResult.access_pid -ne $process.Id) {
                 throw 'The watchdog result identity or fired flag is invalid.'
             }
-            $result.watchdog_fired = $true
             $watchdogWindowEnum = [string]$watchdogResult.window_enum
-            if ($watchdogWindowEnum -notin @('captured', 'failed', 'process-not-running')) {
-                throw "Unexpected watchdog window enumeration status: $watchdogWindowEnum"
+            if ([bool]$watchdogResult.watchdog_fired) {
+                $result.watchdog_fired = $true
+                if ($watchdogWindowEnum -notin @('captured', 'failed', 'process-not-running')) {
+                    throw "Unexpected watchdog window enumeration status: $watchdogWindowEnum"
+                }
+                $result.window_enum_watchdog = $watchdogWindowEnum
             }
-            $result.window_enum_watchdog = $watchdogWindowEnum
+            else {
+                if ($watchdogWindowEnum -cne 'armed' -or
+                    $null -eq $watchdogDeadline -or
+                    $null -eq $watchdogShutdownStartedAt -or
+                    $watchdogShutdownStartedAt -ge $watchdogDeadline) {
+                    throw 'The watchdog remained armed at or beyond its deadline.'
+                }
+                $result.window_enum_watchdog = 'not-needed'
+            }
         }
         catch {
             $result.watchdog_fired = $true
@@ -510,6 +630,18 @@ finally {
             }
         }
     }
+    else {
+        $result.watchdog_fired = $true
+        $result.window_enum_watchdog = 'failed'
+        $watchdogReadError = 'The watchdog result marker is missing.'
+        $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+            $watchdogReadError
+        }
+        else {
+            $validationError + ' ' + $watchdogReadError
+        }
+    }
+
     foreach ($snapshotSource in @(
         [pscustomobject]@{ Path = $windowSnapshotPath; Property = 'window_enum_main' },
         [pscustomobject]@{ Path = $watchdogWindowSnapshotPath; Property = 'window_enum_watchdog' }
@@ -550,36 +682,25 @@ finally {
     else {
         'not-needed'
     }
-
-    $result.access_pid_gone = if ($null -eq $process) {
-        $true
+    $result.shift_released = (([AccessStartupBypassNative]::GetAsyncKeyState(0x10) -band 0x8000) -eq 0)
+    try {
+        $result.database_sha256_after = (Get-FileHash -LiteralPath $databaseFullPath -Algorithm SHA256).Hash
     }
-    else {
-        $null -eq (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)
-    }
-
-    $databaseDirectory = Split-Path -Parent $databaseFullPath
-    $databaseBaseName = [IO.Path]::GetFileNameWithoutExtension($databaseFullPath)
-    $remainingLocks = @(
-        Join-Path $databaseDirectory ($databaseBaseName + '.laccdb')
-        Join-Path $databaseDirectory ($databaseBaseName + '.ldb')
-    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object {
-        $item = Get-Item -LiteralPath $_
-        [pscustomobject][ordered]@{
-            file_name = $item.Name
-            byte_length = $item.Length
-            last_write_time_utc = $item.LastWriteTimeUtc.ToString('o')
-            sha256 = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+    catch {
+        $hashError = "The final database hash could not be read: $($_.Exception.Message)"
+        $validationError = if ([string]::IsNullOrWhiteSpace($validationError)) {
+            $hashError
+        }
+        else {
+            $validationError + ' ' + $hashError
         }
     }
-    $result.lock_files_remaining = @($remainingLocks)
-    $result.shift_released = (([AccessStartupBypassNative]::GetAsyncKeyState(0x10) -band 0x8000) -eq 0)
-    $result.database_sha256_after = (Get-FileHash -LiteralPath $databaseFullPath -Algorithm SHA256).Hash
     $result.finished_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
     $result.error = $validationError
 
     if ($null -eq $validationError -and
         -not $result.watchdog_fired -and
+        $result.watchdog_pid_gone -and
         $result.access_pid_gone -and
         $result.lock_files_remaining.Count -eq 0 -and
         $result.shift_released) {
