@@ -57,6 +57,7 @@ Microsoft Access / VBA の既存システムを、Codex などのAIエージェ�
 - 成功した作業コピーを次の土台にする。
 - 失敗した作業コピーは修復しながら続けず、破棄する。
 - フォームやレポートの差し替えは、作業コピー上なら `DeleteObject -> LoadFromText -> Compile` でよい。
+- 既存フォームを変える前に、コードのみか定義・レイアウト変更かを宣言する。コードのみはアンカー付きCodeModule編集、定義・レイアウトは`SaveAsText -> DeleteObject -> LoadFromText`を使い、`CreateForm/CreateControl`での再作成へ無断で切り替えない。
 - 標準開発手順では、変更対象の`SaveAsText`と予定diffの一致確認を必須にする。使い捨て調査でDBコピー単位の復旧だけを目的とする場合は省略できる。
 - `SaveAsText` 出力は文字コードを決め打ちしない。先頭バイトを確認し、UTF-16 LE / UTF-8 / CP932を切り分ける。
 - 文字コード確認は、長い `powershell.exe -Command ... ReadAllBytes ... ToString('X2')` ではなく、名前付きスクリプトや読みやすい短いコマンドで行う。

@@ -66,6 +66,7 @@ Access作業では、目的達成を急ぐほど共通ルールを飛ばしが�
 15. 無効化方法: not-required / existing-SKIP_AUTOEXEC / add-SKIP_AUTOEXEC / approved-exception:
 16. AllowBypassKey（一時変更の有無・承認者・承認日時を含む）、外部接続棚卸しとallowlistのSHA-256、および通常起動と無効化起動の検証証跡:
 17. 採用する開発baselineとSHA-256:
+18. 既存フォーム/レポートを変更する場合: 対象名、コードのみ/定義・レイアウト、採用経路:
 ```
 
 必須ヒアリングの完了後、作業担当は安全な事前調査で不足を補います。このゲートを依頼元へ伝えられない場合は、Access資産への実装、VBE編集、`LoadFromText`、DDL、データ更新、コンパイルをまだ実行しません。`自動起動: 未確認`のまま進めず、判定できない理由と安全な次手を相談します。検証済みbaselineを再利用する場合は保存済み証跡を示し、調査を繰り返しません。
@@ -309,12 +310,13 @@ Access作業でユーザーから「どのMDBを確認すればよいか」と�
 
 作業コピーであれば、フォームやレポートの差し替えは
 `DeleteObject -> LoadFromText` で進めてよいです。
+既存フォームの変更前には、コードのみか定義・レイアウト変更かを判定し、採用経路を作業前ゲートに記録します。既存フォームを`CreateForm`/`CreateControl`で再作成する経路へ無断で切り替えません。
 
 標準手順:
 
 ```text
 作業コピー作成
--> 必要なら SaveAsText で退避
+-> 標準開発では変更対象を SaveAsText で退避し予定diffを確認
 -> DeleteObject
 -> LoadFromText
 -> RunCommand(126) でコンパイル
